@@ -279,8 +279,9 @@ The spec does not register types. This list is our own convention and can grow.
   cross-repo links. Run it nightly, and on demand from repo pipelines.
 - Each repo's CI runs the okf-skills validator with `--strict` on `okf/`.
 - Developers who want cross-repo queries locally run the same assembly
-  script. It reads from sibling checkouts; the prototype script reads a
-  workspace directory.
+  script. It fetches `okf/` from each remote in `repos.txt`, so no local
+  checkouts are needed; the prototype script still reads a workspace
+  directory.
 
 ## 6. Agent skill outline
 
