@@ -29,6 +29,7 @@ The main UX risks:
 - Branch mode depends on two local git hooks and a sync job in the hub. An
   agent without the hooks must pair `okf/` with its branch itself, and if the
   sync job stops, knowledge pull requests stay open after their code merges.
+  `git pull` does not update `okf/`, so the agent pulls it before reading.
 - Until okfcli#34 is fixed, `okf validate` rejects the datetime `stale_after`
   this design uses, and `okf show` says `stale: false` for such a concept even
   after the date passes. A date-only value avoids both today but departs from
@@ -120,7 +121,7 @@ flowchart LR
 
 | Actor | Uses | Never does |
 |---|---|---|
-| Coding agent | Six commands: `okf search`, `show`, `list`, `backlinks`, `index`, `validate` (the okf-skills validator stands in for `validate` until okfcli#34 is fixed). Plain file edits. In branch mode, `git -C okf` to check the paired branch, commit, and push. | Adds a `verified` stamp, `human:` or `process:`; edits `knowledge-hub/repos/`; links from one repo bundle into another repo's files; pushes to `okf/main` directly |
+| Coding agent | Six commands: `okf search`, `show`, `list`, `backlinks`, `index`, `validate` (the okf-skills validator stands in for `validate` until okfcli#34 is fixed). Plain file edits. In branch mode, `git -C okf` to check the paired branch, pull, commit, and push. | Adds a `verified` stamp, `human:` or `process:`; edits `knowledge-hub/repos/`; links from one repo bundle into another repo's files; pushes to `okf/main` directly |
 | Developer | Reads the markdown on GitHub or in an editor. Asks the agent. Runs the assembly script locally for cross-repo work. In branch-mode repos, runs the setup script once per clone. | Needs to learn the CLI to benefit |
 | Reviewer | The pull request diff, usually 1–3 knowledge files; in branch mode, the knowledge pull request linked from the code one. Adds one `verified` line in their own commit. | Approves a `verified: human:` line they did not write |
 | Repo CI | `okf_validate.py okf --strict` from okf-skills; then `okf index okf` and `test -z "$(git status --porcelain -- okf)"`, which fails if the committed index files are out of date. The branch-mode workflow runs the same checks on `.`, the bundle root. | Changes any files |
@@ -224,7 +225,8 @@ The index files are generated, so two pull requests often conflict in them.
 In a test, conflicts appeared when both added concepts that sort next to each
 other, when both created a folder, and when both edited concepts with adjacent
 index rows. When a merge or rebase conflicts in an `index.md`, the agent takes
-either side and re-runs `okf index okf`; that gave a correct index every time.
+either side and re-runs `okf index okf`; that gave a correct index every time
+([evidence](../research/okf-knowledge-system/evidence/index-files.md)).
 In `log.md` it keeps both entries. Neither validator notices an out-of-date
 index, so repo CI checks it (section 3).
 
@@ -457,6 +459,19 @@ job rules. This is how they feel in use. Output is from the scratch-repo test
    the setup script first. Otherwise it switches `okf/` itself, creating the
    branch from `origin/okf/feat/retry` if a teammate pushed it, else from
    `origin/okf/main`.
+
+   Then it updates `okf/`. `git pull` on the code branch does not touch it,
+   so without this an agent on `main` reads `okf/main` as this clone last
+   saw it, missing knowledge pull requests merged since. The pull applies
+   only when `okf/` tracks a remote branch: `okf/main`, or a knowledge branch
+   someone pushed. A new, unpushed `okf/<b>` has nothing to pull, and
+   `git pull` would fail on it for lack of an upstream.
+
+   ```
+   $ git -C okf status --short --branch
+   ## okf/main...origin/okf/main [behind 2]
+   $ git -C okf rev-parse -q --verify @{upstream} >/dev/null && git -C okf pull -q --ff-only
+   ```
 4. The agent reads and writes exactly as in sections 4.1 and 4.2. Then it
    commits inside `okf/`, pushes the code branch and then the knowledge
    branch, and opens the knowledge pull request from `okf/feat/retry` into
@@ -514,7 +529,7 @@ sequenceDiagram
   S->>K: delete okf/feat/retry once feat/retry is gone
 ```
 
-Three more things to know:
+Four more things to know:
 
 - Uncommitted edits in `okf/` follow a branch switch to the next knowledge
   branch, as git does for code. Commit knowledge before switching.
@@ -524,6 +539,8 @@ Three more things to know:
   follows both renames.
 - The hub and other repos see only `okf/main`. Knowledge on `okf/feat/retry`
   is visible only on that branch until the sync job merges it.
+- `git gc` reports every branch it packs as deleted. The hook ignores those
+  reports, so `okf/` stays paired and no knowledge branch is lost.
 
 ## 5. Life of a concept
 
@@ -610,6 +627,7 @@ Two rules for backlinks:
 | Two pull requests change the same folder | Merge conflict in a generated `index.md` or in `log.md` | Take either side of `index.md` and re-run `okf index okf`; keep both `log.md` entries (section 4.2) |
 | Pull request adds or edits a concept without re-running `okf index` | Repo CI fails the index check | Run `okf index okf` and commit |
 | Branch mode: hooks missing (CI, cloud agent, or a hook manager set `core.hooksPath`) | A fresh clone has no `okf/`; an older one keeps `okf/` on the knowledge branch of an earlier code branch, and knowledge commits land there | The skill runs the setup script if `okf/` is missing and checks the pairing before reading or writing (section 4.9). For hook managers, add the two hooks to the manager by hand. |
+| Branch mode: knowledge merged since the last pull | `okf/` lacks it; `git -C okf status --short --branch` shows `behind` | The skill pulls `okf/` before reading whenever it tracks a remote branch (section 4.9) |
 | Branch mode: CI or cloud agent does not know the repo uses branch mode | The agent works without the repo's knowledge | Open gap: such agents lack the developers' user-level instructions. Organisation-level agent instructions are the likely fix (section 9). |
 | Branch mode: code pull request merged, but its knowledge pull request is unapproved, failing or conflicting | The knowledge pull request stays open; the sync job comments on both pull requests | Approve it, or resolve as in section 4.2 (`okf index okf` for `index.md` conflicts); the next sync run merges it |
 | Branch mode: code branch deleted locally while `okf/` holds uncommitted work on its knowledge branch | `Kept okf/feat/y: okf/ has uncommitted changes on it.` | Commit or discard the work, switch `okf/` to `okf/main`, then delete the knowledge branch by hand |

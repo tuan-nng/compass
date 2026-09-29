@@ -88,6 +88,12 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 while read -r _ new ref; do
   case "$new" in *[1-9a-f]*) continue;; esac          # deletions only (new id is all zeros)
   case "$ref" in refs/heads/okf/*) continue;; refs/heads/*) ;; *) continue;; esac
+  # git gc and git pack-refs report every branch they pack as deleted: skip
+  # branches that still exist.
+  git show-ref -q --verify "$ref" && continue
+  # Deleting a packed branch fires this hook twice, the first time while git
+  # holds packed-refs.lock, so git branch -D would fail. Act on the second.
+  [ -e "$(git rev-parse --git-common-dir)/packed-refs.lock" ] && continue
   b=${ref#refs/heads/}
   [ "$b" = "$(git config okf.defaultBranch)" ] && continue
   k="okf/$b"

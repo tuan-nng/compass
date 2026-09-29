@@ -4,7 +4,8 @@ Date: 2026-09-29. git 2.53.0, okfcli v0.5.0, okf-skills validator v0.10.0.
 Scratch repos only: bare `origin.git` and `origin2.git` plus clones for alice,
 bob, carol, dave and `m`. Script under test:
 [okf-branch-setup.sh](okf-branch-setup.sh). The hub's sync job was not built,
-so nothing here covers the remote side.
+so nothing here covers the remote side. In step 16 a plain `git merge --no-ff`
+in a separate clone stands in for its merge.
 
 ## Question
 
@@ -26,9 +27,10 @@ and be cleaned up when that branch is deleted, without losing work?
   - `post-checkout` switches `okf/` on every branch checkout.
   - `reference-transaction` deletes `okf/<b>` when `<b>` is deleted, unless
     `okf/<b>` has commits that no remote-tracking branch contains, or `okf/`
-    has uncommitted changes while on `okf/<b>`.
+    has uncommitted changes while on `okf/<b>`. It ignores branches that still
+    exist after the update, which is how `git gc` packing a branch looks.
 
-Earlier versions of the hooks hit four traps, all fixed in the script:
+Earlier versions of the hooks hit six traps, all fixed in the script:
 
 - The hooks directory is shared by every worktree, so a switch inside `okf/`
   ran `post-checkout` again and created branches such as `okf/okf/feat/retry`.
@@ -41,6 +43,17 @@ Earlier versions of the hooks hit four traps, all fixed in the script:
   branch was deleted. The hook now checks `git status --porcelain` first.
 - The hook force-deleted knowledge branches whose commits were never pushed.
   It now keeps them.
+- `git gc` and `git pack-refs`, which git also runs on its own, move each
+  branch into `packed-refs` and report the loose copy as deleted. The hook
+  took that for a branch delete. On `feat/cur`, `git pack-refs --all` moved
+  `okf/` to `okf/main` and deleted the pushed `okf/feat/cur` and
+  `okf/feat/keep`, although both code branches still existed. Unpushed
+  knowledge branches were kept, so no work was lost. The hook now skips any
+  branch that still exists.
+- Deleting a packed branch runs the hook twice, the first time while git holds
+  `packed-refs.lock`. The hook's own `git branch -D` then failed with
+  `Unable to create '…/packed-refs.lock': File exists` before the second run
+  succeeded. The hook now waits for the run without the lock.
 
 A symlinked `okf/` pointing into a hub checkout was also tried and rejected:
 `okf list okf` returned 0 concepts and `okf validate okf` returned
@@ -97,8 +110,8 @@ $ git switch -q feat/retry; ls okf; git -C okf rev-parse --abbrev-ref @{upstream
 ## 5. Deleting a code branch deletes its pushed knowledge branch
 $ git switch -q main; git branch -D feat/retry
   okf/ -> okf/main
-  Deleted branch okf/feat/retry (was 56dcb3a).
-  Deleted branch feat/retry (was ad1266d).
+  Deleted branch okf/feat/retry (was 057f8c0).
+  Deleted branch feat/retry (was 900c856).
 $ git branch --format='%(refname:short)'
   main
   okf/main
@@ -114,13 +127,13 @@ $ git switch -q -c feat/x; echo one > okf/one.md; git -C okf add -A; git -C okf 
   okf/ -> okf/main
 $ git branch -D feat/x
   Kept okf/feat/x: it has commits that are not on the remote.
-  Deleted branch feat/x (was ad1266d).
+  Deleted branch feat/x (was 900c856).
 $ git branch --format='%(refname:short)'
   main
   okf/feat/x
   okf/main
 $ git branch -D okf/feat/x
-  Deleted branch okf/feat/x (was 1001666).
+  Deleted branch okf/feat/x (was 3528ce8).
 
 ## 7. Uncommitted work in okf/ on the knowledge branch is kept
 $ git switch -q -c feat/y; git switch -q main; git -C okf switch -q okf/feat/y; echo draft > okf/draft.md
@@ -128,12 +141,12 @@ $ git switch -q -c feat/y; git switch -q main; git -C okf switch -q okf/feat/y; 
   okf/ -> okf/main
 $ git branch -D feat/y
   Kept okf/feat/y: okf/ has uncommitted changes on it.
-  Deleted branch feat/y (was ad1266d).
+  Deleted branch feat/y (was 900c856).
 $ git -C okf branch --show-current; git branch --format='%(refname:short)' | grep feat/y
   okf/feat/y
   okf/feat/y
 $ rm okf/draft.md; git -C okf switch -q okf/main; git branch -D okf/feat/y
-  Deleted branch okf/feat/y (was 58fd858).
+  Deleted branch okf/feat/y (was 3c44615).
 
 ## 8. Uncommitted knowledge edits follow a code-branch switch, like code edits
 $ git switch -q -c feat/z; echo draft > okf/draft.md; git switch -q main; git -C okf status --short --branch
@@ -142,14 +155,14 @@ $ git switch -q -c feat/z; echo draft > okf/draft.md; git switch -q main; git -C
   ## okf/main...origin/okf/main
   ?? draft.md
 $ rm okf/draft.md; git branch -D feat/z
-  Deleted branch okf/feat/z (was 58fd858).
-  Deleted branch feat/z (was ad1266d).
+  Deleted branch okf/feat/z (was 3c44615).
+  Deleted branch feat/z (was 900c856).
 
 ## 9. Renaming a code branch
 $ git switch -q -c feat/old; git push -q -u origin feat/old; git -C okf push -q -u origin okf/feat/old
   okf/ -> okf/feat/old
 $ git branch -m feat/old feat/new
-  Deleted branch okf/feat/old (was 58fd858).
+  Deleted branch okf/feat/old (was 3c44615).
 $ git branch --show-current; git -C okf branch --show-current
   feat/new
   okf/main
@@ -194,8 +207,8 @@ $ git -C okf push -q -u origin okf/main; git switch -q -c feat/m; git switch -q 
   okf/feat/m
   okf/main
 $ git branch -D feat/m; git branch --format='%(refname:short)'
-  Deleted branch okf/feat/m (was 22fd6c2).
-  Deleted branch feat/m (was b6583de).
+  Deleted branch okf/feat/m (was e9e53cc).
+  Deleted branch feat/m (was 309b93e).
   master
   okf/main
 
@@ -203,6 +216,32 @@ $ git branch -D feat/m; git branch --format='%(refname:short)'
 $ git config core.hooksPath .husky; okf-branch-setup.sh; echo exit=$?
   core.hooksPath is set, so git ignores .git/hooks. Add the two hooks from this script to that hook manager by hand.
   exit=1
+
+## 15. git gc packs branches without touching the pairing
+$ git switch -q -c feat/g; echo g > okf/g.md; git -C okf add -A; git -C okf commit -qm g
+  okf/ -> okf/feat/g
+$ git push -q -u origin feat/g && git -C okf push -q -u origin okf/feat/g
+$ git gc -q; git pack-refs --all; git -C okf branch --show-current; git branch --format='%(refname:short)' | grep feat/g
+  okf/feat/g
+  feat/g
+  okf/feat/g
+$ git switch -q main; git branch -D feat/g; git branch --format='%(refname:short)' | grep -c feat/g
+  okf/ -> okf/main
+  Deleted branch okf/feat/g (was a567f6f).
+  Deleted branch feat/g (was 900c856).
+  0
+
+## 16. git pull does not update okf/
+$ git switch -q -c feat/auth; printf -- '---\ntype: Gotcha\ntitle: Session auth\n---\nx\n' > okf/auth.md
+  okf/ -> okf/feat/auth
+$ git -C okf add -A && git -C okf commit -qm 'okf: session auth'; git push -q -u origin feat/auth && git -C okf push -q -u origin okf/feat/auth
+(the knowledge pull request is merged into okf/main on origin with a merge commit, as the sync job would)
+$ git pull -q; ls okf; git -C okf status --short --branch
+  index.md
+  ## okf/main...origin/okf/main [behind 2]
+$ git -C okf pull -q --ff-only; ls okf
+  auth.md
+  index.md
 ```
 
 ## CI files on the knowledge branch
@@ -233,6 +272,8 @@ tested.
 | `--init` in a clone older than the pushed `okf/main` | The script fetches first and uses the pushed trunk; no second trunk |
 | Default branch named `master` | Pairs with `okf/main`; feature branches pair and clean up normally |
 | `core.hooksPath` set (husky, lefthook) | Setup refuses; hooks must be added to that manager by hand |
+| `git gc` and `git pack-refs` | Pass: `okf/` stays paired and no knowledge branch is deleted; deleting the packed branch afterwards cleans up normally |
+| Knowledge merged into `okf/main` on the remote | `git pull` on the code branch leaves `okf/` behind (`[behind 2]`); `git -C okf pull --ff-only` brings it up to date |
 
 Limits:
 
@@ -240,6 +281,11 @@ Limits:
   for the `reference-transaction` hook.
 - The remote must be called `origin`.
 - git runs the `reference-transaction` hook for every ref update, including
-  each commit, fetch and rebase step. The hook exits after one comparison for
-  anything but a committed deletion. On Linux that cost is negligible.
+  each commit, fetch, rebase step and `git gc`. The hook exits after one
+  comparison for anything but a committed deletion, and after one more check
+  for a branch that still exists. On Linux that cost is negligible.
   [INFERENCE: on Git for Windows each shell start is slower; not measured.]
+- Nothing updates `okf/` when the code branch is pulled. The skill must run
+  `git -C okf pull --ff-only` before reading (step 16), but only when `okf/`
+  tracks a remote branch: on a new, unpushed `okf/<b>` it fails with
+  `There is no tracking information for the current branch.`

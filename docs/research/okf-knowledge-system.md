@@ -233,8 +233,13 @@ branch. okfcli read the `okf/` worktree normally. Deleting a code branch
 deleted its knowledge branch, except when the knowledge was never pushed or
 `okf/` held uncommitted work on it; then the hook kept it. Renaming a code
 branch looks like a delete to the hook, so the knowledge branch must be
-renamed first. A symlinked `okf/` pointing into a hub checkout was rejected:
-okfcli read 0 concepts through it and still reported `"valid": true`.
+renamed first. `git gc` reports every branch it packs as deleted; the hook
+now skips branches that still exist, so gc left every pairing alone.
+`git pull` on a code branch does not update `okf/`: after a knowledge pull
+request merged, `okf/` stayed 2 commits behind `origin/okf/main` until
+`git -C okf pull --ff-only`. A symlinked `okf/` pointing into a hub checkout
+was rejected: okfcli read 0 concepts through it and still reported
+`"valid": true`.
 
 ## 5. Proposed conventions
 
@@ -293,12 +298,19 @@ does the local part:
     `okf/` where it was.
   - `reference-transaction` deletes `okf/<b>` when `<b>` is deleted locally.
     It keeps the branch, with a message, when `okf/<b>` has commits no remote
-    branch contains, or when `okf/` has uncommitted changes on it. It never
-    deletes anything on the remote. git has no rename event, so
-    `git branch -m` looks like a delete: rename `okf/<old>` to `okf/<new>`
+    branch contains, or when `okf/` has uncommitted changes on it. It ignores
+    `git gc` and `git pack-refs`, which report each branch they pack as
+    deleted. It never deletes anything on the remote. git has no rename event,
+    so `git branch -m` looks like a delete: rename `okf/<old>` to `okf/<new>`
     first.
 - refuses to run if `core.hooksPath` is set (husky, lefthook). Those repos add
   the two hooks to their hook manager by hand.
+
+Nothing moves `okf/` forward when the code branch is pulled. Knowledge merged
+into `okf/main` reaches a clone only through `git -C okf pull --ff-only`,
+so the skill runs it before reading whenever `okf/` tracks a remote branch
+(section 6). A new, unpushed `okf/<b>` has no upstream and nothing to pull,
+and the pull would fail there.
 
 Fresh clones in CI and cloud agents have no `okf/` worktree and no hooks. The
 skill must create the worktree itself (section 6). Such agents also lack
@@ -392,8 +404,11 @@ The spec does not register types. This list is our own convention and can grow.
   cross-repo links. Run it nightly, and on demand from repo pipelines.
 - Knowledge on `okf/<b>` branches is not assembled. Cross-repo views contain
   only knowledge that has reached the default branch or `okf/main`.
-- Each repo's CI runs the okf-skills validator with `--strict` on `okf/`. In
-  branch mode, the workflow on `okf/main` runs the same checks.
+- Each repo's CI runs the okf-skills validator with `--strict` on `okf/`, then
+  `okf index okf` and `test -z "$(git status --porcelain -- okf)"`, which fails
+  when the committed index files are out of date. Neither validator notices a
+  stale index ([evidence/index-files.md](okf-knowledge-system/evidence/index-files.md)).
+  In branch mode, the workflow on `okf/main` runs the same checks.
 - Developers who want cross-repo queries locally run the same assembly
   script. It fetches from each remote in `repos.txt`, so no local checkouts
   are needed; the prototype script still reads a workspace directory.
@@ -412,7 +427,9 @@ and `okf validate`.
      fresh clone, run the setup script first; it also hides `okf/` from the
      code branches, so a later `git add -A` cannot pick it up. Switch the
      branch if it does not match. The hooks are missing in CI, in cloud
-     agents and in repos with a hook manager.
+     agents and in repos with a hook manager. If `okf/` tracks a remote
+     branch, run `git -C okf pull --ff-only`, because `git pull` on the
+     code branch does not update `okf/`.
    - read `okf/index.md` and `overview.md`;
    - run `okf search okf --text <terms>`;
    - for cross-repo questions, run `okf search` and `okf backlinks` on the
@@ -423,12 +440,15 @@ and `okf validate`.
    the same change. If code is not available, set `status: draft` and say why.
 4. **Before finishing:** record new knowledge by editing files directly. Use
    one file per concept and set the `generated` stamp. Then run
-   `okf index okf` and `okf validate okf`.
+   `okf index okf` and the okf-skills validator (`okf_validate.py okf
+   --strict`). Switch to `okf validate okf` once okfcli#34 is fixed; until
+   then it rejects the datetime `stale_after`.
    - In branch mode, commit inside `okf/`, push `<b>` and then `okf/<b>`, and
      open a knowledge pull request into `okf/main` linked from the code pull
      request.
    - Cross-repo facts go to the hub repo as a separate change.
-   - Agents never add a `verified` entry with a `human:` actor.
+   - Agents never add a `verified` entry, with a `human:` or a `process:`
+     actor.
 5. **What not to record:** anything the code already states plainly, copied
    code, or secrets. Knowledge should explain why, how things connect, and
    what is surprising.
@@ -484,8 +504,10 @@ bundle are relative, so they stay valid. [INFERENCE: not tested.]
    that a repo uses branch mode; organisation-level agent instructions are
    the likely place.
 4. Pilot with 2–3 repos, at least one in each mode, and measure how often
-   agents write knowledge, how often reviewers correct it, and how often stale
-   concepts are hit.
+   agents write knowledge, how often reviewers correct it, how often stale
+   concepts are hit, how often an edit removes a concept's `verified` stamp,
+   and, in branch mode, how often a knowledge pull request is still open a
+   day after its code merged.
 
 ## Evidence
 
@@ -498,6 +520,7 @@ Full logs, with commands and real output, for each tool:
 [okf gem](okf-knowledge-system/evidence/okf-gem.md),
 [desk research and maturity data](okf-knowledge-system/evidence/desk.md),
 [test protocol](okf-knowledge-system/evidence/protocol.md),
-[branch mode](okf-knowledge-system/evidence/branch-mode.md).
+[branch mode](okf-knowledge-system/evidence/branch-mode.md),
+[index files](okf-knowledge-system/evidence/index-files.md).
 The test data was generated under `/tmp/okf-research/`, and the protocol
 describes it.
