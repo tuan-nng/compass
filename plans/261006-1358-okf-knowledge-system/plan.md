@@ -4,7 +4,7 @@ description: "People clone compass, build one compass binary, connect it to thei
 status: pending
 priority: P1
 effort: 17d build + 4-week pilot per mode
-branch: main
+branch: master
 tags: [okf, knowledge, agents, tooling, go, cli]
 created: 2026-10-06
 ---
@@ -46,20 +46,20 @@ All of this was verified on 2026-10-06. Code paths refer to `okf-tools`, which p
 - **Branch-mode setup and `okf/main` CI.**
   - `okf-branch-setup.sh` is hardened and passes 25 automated cases, with hook snippets for husky and lefthook.
   - The `okf/main` workflow template is proven on `tuan-nng/okf-scratch-branch-mode`: a clean PR passed, and a PR with a stale index failed.
-  - The research report and design doc now record this as a tested fact.
+  - The design doc and research report section 5 record this as a tested fact. Research report section 8, item 3 still lists it as a to-do; phase 05 removes it.
 - **Hub assembly, not yet live.**
   - Built: the assembly script, the hub check, the hub action and workflow template, and the GitHub App helper.
   - `test/assemble.sh` passes. `bench-assemble.sh 50` runs in 5.0 s cold and 5.0 s warm.
   - Scratch repos `okf-scratch-billing-api`, `okf-scratch-shared-auth` and `okf-scratch-web-app` exist. No hub CI run has happened.
 - **Code with no live run yet.**
-  - The stamper and sync job in Python: 27 and 25 recorded-API tests, `okf-tools` `783c201`..`9dcdd60`, local only.
+  - The stamper and sync job in Python: 27 stamper tests (21 on recorded API responses, 6 front-matter unit tests) and 25 sync tests on recorded API responses, `okf-tools` `783c201`..`9dcdd60`. These commits are local only: GitHub's `okf-tools` stops at `fa42d76`.
   - The skill, the installer, the pointer lines and the skill-eval harness: uncommitted in `okf-tools`.
 
 ## Decisions
 
 Confirmed with the user:
 
-1. **Code home: compass.** All tooling code, actions, templates, test data and the skill live in compass. Compass is pushed to the private `tuan-nng/compass`, and its Actions access opens to the account's private repos. This replaces the earlier rule that compass is never pushed. Rejected alternatives:
+1. **Code home: compass.** All tooling code, actions, templates, test data and the skill live in compass. Compass is already the private `tuan-nng/compass` on GitHub (default branch `master`), holding only docs and plans. The code is pushed there, and its Actions access opens to the account's private repos. Rejected alternatives:
    - a separate tooling repo, which means two places to clone and keep in step;
    - keeping compass local and publishing actions from a second repo.
 2. **One Go binary.** `compass` replaces every script with a subcommand. It uses only the Go standard library and `gopkg.in/yaml.v3`, the YAML library okfcli already uses. The rejected alternative was a thin wrapper around the existing bash and Python.
@@ -101,10 +101,10 @@ Decided in planning:
 15. **No repo pipeline triggers the hub.** Hub CI runs nightly, on manual dispatch, and on hub pull requests. A hub pull request that waits on a repo change goes green when its author re-runs its check after that change merges, and the skill says so. The rejected alternative needs a hub write credential in every pilot repo.
 16. **The CI entry points are composite actions that build `compass` from source.** Callers pin each action by commit SHA. The action sets up Go with a SHA-pinned `actions/setup-go`, with its build cache on, and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. Rejected alternatives:
     - release binaries: faster, but a second pin and a release pipeline;
-    - reusable workflows: their caller's token can't read a private compass.
+    - reusable workflows: a called workflow runs with its caller's token, which can't check out a private compass to build it.
 17. **Neutral module path.** The Go module is named `compass`, so no account name appears in the code (decision 7). People build from a clone with `make install`. The rejected alternative, `github.com/<org>/compass`, hard-codes today's account into every import.
 18. **Old test suites become end-to-end checks.** The bash suites move to compass and drive the built binary, so the cases stay and only the commands change. The recorded-API tests become Go tests on the same JSON fixtures. The rejected alternative rewrote everything as Go unit tests and loses the black-box evidence.
-19. **Strict validator: port it to Go** (awaiting user confirmation; see Unresolved Questions). The vendored okf-skills validator is 573 lines of Python, MIT-licensed. It becomes a Go package. A differential test runs both versions on the fixture, the prototype hub and a set of broken bundles, and requires the same findings. The Python copy stays as a test-only reference. The rejected alternative ran Python under uv at runtime.
+19. **Strict validator: port it to Go** (confirmed by the user on 2026-10-06). The vendored okf-skills validator is 573 lines of Python, MIT-licensed, parsing YAML with pyyaml. It becomes a Go package behind `compass validate`. A differential test runs both versions on the fixture, the prototype hub and a set of broken bundles, and requires the same findings. The Python copy stays as a test-only reference. Rejected alternatives: running Python under uv at runtime, which needs Python and uv everywhere; and dropping it for `okf validate`, which loses findings only the strict validator reports, such as a missing frontmatter block.
 
 ## Design
 
@@ -113,7 +113,7 @@ Decided in planning:
 - **`compass` binary** (`cmd/compass` and internal packages). Subcommands:
   - `setup`;
   - `okf install`;
-  - `validate`;
+  - `validate`, the strict validator (decision 19);
   - `bundle check`;
   - `hub assemble` and `hub check`;
   - `branch setup`;
@@ -137,14 +137,14 @@ Decided in planning:
 
 - **Pinned `okf`.** The same commands and JSON as okfcli v0.5.0. `stale_after` takes an RFC 3339 datetime or a date, and `okf show` reports `.concept.stale: true` once it has passed.
 - **`compass bundle check <dir>`.** Fails on a strict-validator finding or an out-of-date index.
-- **`compass hub assemble [--ci|--local] <hub>`.** Reads `repos.txt` lines of the form `<name> <URL> <folder|branch>`, and accepts only `https://github.com/$OKF_ORG/` URLs. It keeps a clone cache and writes `repos/<name>/`. It exits non-zero and names the repo when:
+- **`compass hub assemble [--ci|--local] <hub>`.** Reads `repos.txt` lines of the form `<name> <URL> <folder|branch>`, and accepts only `https://github.com/$OKF_ORG/` URLs. It keeps a clone cache, writes `repos/<name>/`, and removes repos no longer listed. It exits non-zero and names the repo when:
   - fetching fails;
   - the bundle is empty;
   - the bundle holds a symlink.
 
   In local mode, a repo that can't be fetched keeps its previous copy and gets a warning.
 - **`compass hub check <hub>`.** Runs the strict validator, and checks that each repo's concept count is above zero and matches the files copied.
-- **`compass stamp`.** Reads `checks.txt` rows of the form `<repo> <workflow-file> <job> <process-actor> <concept-id>...`. For each row it stamps the concepts as they are at the commit where the named job last succeeded on a push to the default branch's head. It sets `verified.at` to the job's completion time. It skips:
+- **`compass stamp`.** Reads `checks.txt` rows of the form `<repo> <workflow-file> <job> <process-actor> <concept-id>...`, split shell-style, so a job name with spaces is quoted. For each row it stamps the concepts as they are at the commit where the named job last succeeded on a push to the default branch's head. It sets `verified.at` to the job's completion time. It skips:
   - concepts generated after that time;
   - concepts already holding a current entry from that actor.
 
@@ -227,7 +227,7 @@ Decided in planning:
 | 01 | M1 | [phase-01-cli-core.md](phase-01-cli-core.md) | `compass` builds from a clone and replaces every script except the writer jobs; the moved suites pass against it | pending |
 | 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | pending |
 | 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | pending |
-| 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Compass is pushed; a scratch hub made from the template and the scratch repos run green on compass actions | pending |
+| 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Compass code is pushed; a scratch hub made from the template and the scratch repos run green on compass actions | pending |
 | 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools` and `tuan-nng/knowledge-hub` are deleted, and the docs describe compass and the end-user hub | pending |
 | 06 | M3 | [phase-06-org-and-check-job.md](phase-06-org-and-check-job.md) | Compass and the fork move to the company org; the writer app stamps live | pending |
 | 07 | M3 | [phase-07-sync-live.md](phase-07-sync-live.md) | The sync job carries out every state-table row against a scratch branch-mode repo | pending |
@@ -247,7 +247,7 @@ Dependencies:
 - 09 needs 07 and 08.
 - 10 needs 09 and the pilot windows.
 
-Scope: ten phases. Each closes one milestone step with its own exit check. M1 is a rewrite of about 2,500 lines across one module, and splitting it further would hide which half works.
+Scope: ten phases. Each closes one milestone step with its own exit check. M1 rewrites about 2,600 lines (824 of shell and Python entry points, 1,113 of Python library, 573 of validator) in one module, and splitting it further would hide which half works.
 
 ## Non-Goals
 
@@ -265,7 +265,7 @@ Scope: ten phases. Each closes one milestone step with its own exit check. M1 is
 
 ## Acceptance Criteria
 
-1. A fresh compass clone builds `compass` with `make install`, with Go as the only prerequisite. `compass setup` against a readable hub leaves a working `okf`, the skill in each detected agent folder, and a config. Against an unreadable hub it writes nothing.
+1. A fresh compass clone builds `compass` with `make install`, with Go, make and git as the only prerequisites. `compass setup` against a readable hub leaves a working `okf`, the skill in each detected agent folder, and a config. Against an unreadable hub it writes nothing.
 2. Every case in the moved suites passes against `compass`, and both recorded-API test sets pass in Go.
 3. A hub made only by copying `templates/hub/` and running `compass app create` assembles on GitHub. It fails on a broken cross-repo link, an empty bundle and a symlink.
 4. `tuan-nng/okf-tools` and `tuan-nng/knowledge-hub` no longer exist, and nothing live refers to them.
@@ -290,7 +290,7 @@ Run from the compass root:
 - **The rewrite drops a behavior.** Signal: a moved end-to-end case fails, or a live run differs from its recorded result. Response: fix in place. The old scripts stay readable in the local `okf-tools` clone until phase 05.
 - **The validator port disagrees with okf-skills.** Signal: the differential test reports a difference. Response: fix the port. If the YAML parsing differences can't be closed, return to planning on decision 19.
 - **Building Go in every CI job is slow.** Signal: the build step goes over 60 s. Response: rely on `setup-go`'s cache. If that isn't enough, return to planning on decision 16.
-- **Pushing compass exposes local-only files.** Signal: before the first push, `git ls-files` lists harness folders or `CLAUDE.local.md`. Response: stop and ask the user.
+- **Pushing compass exposes local-only files.** The harness folders and `CLAUDE.local.md` are ignored only through this clone's `.git/info/exclude`. Signal: before a push, `git ls-files` lists harness folders or `CLAUDE.local.md`. Response: stop and ask the user.
 - **The account can't delete repos.** The `gh` token lacks `delete_repo`. Signal: HTTP 403. Response: the user runs `gh auth refresh -s delete_repo`, or deletes the repos in the GitHub UI.
 - **GitHub Free blocks hub protections on private repos.** Rulesets return HTTP 403, and private-repo environments need a paid plan. So the CODEOWNERS-review check and the `okf-write` environment refusal can't be shown until the company org exists. Signal: phase 06 starts before the org exists. Response: phase 06 waits for the org, as the user chose.
 - **The company org grant arrives late.** Signal: phase 06 can't move a repo or install an app. Response: M1–M2 stay usable under the personal account, and M3 waits.
@@ -303,12 +303,25 @@ Run from the compass root:
 
 ## Unresolved Questions
 
-1. **Strict validator (decision 19).** Options:
-   - (a) **Port it to Go, with a differential test against the Python copy.** Recommended: one binary, no Python at runtime.
-   - (b) Keep the Python validator under uv: exact, but Python and uv are needed everywhere.
-   - (c) Drop it and rely on `okf validate`: fewer checks, and the hub check loses findings only the strict validator reports, such as a missing frontmatter block.
-
 Inputs with fixed deadlines:
 
-2. **The company org name, and who approves app installs.** Needed before phase 06.
-3. **The pilot repos, with their maintainers' agreement.** Needed before phase 08.
+1. **The company org name, and who approves app installs.** Needed before phase 06.
+2. **The pilot repos, with their maintainers' agreement.** Needed before phase 08.
+
+## Validation Log
+
+### Session 1 — 2026-10-06
+**Trigger:** `/af:plan validate`, plan written in an earlier session. **Claims checked:** every cited path, commit, count, flag, doc section and live repo, by three read-only scouts plus direct `gh`, `git` and `okf` runs
+**Verified:** all claims not listed below | **Failed:** 22 | **Unverified:** 0 (the account plan name is hidden; the ruleset API's "Upgrade to GitHub Pro" 403 confirms the Free-plan risk)
+- Failed: frontmatter `branch: main` — compass uses `master`; fixed in frontmatter
+- Failed: compass "pushed" in phase 04 — `tuan-nng/compass` exists, private, `master`, created 2026-09-29; fixed in decision 1, frontmatter, Risks, phase 04
+- Failed: "27 recorded-API tests" — `okf-tools/test/stamp/test_frontmatter.py` holds 6 unit tests; fixed in Landed, phase 02
+- Failed: move "at `9dcdd60`" loses uncommitted skill, skill-eval, pointers, `THIRD_PARTY.md`, `bin/okf-tools-install`; `run-all.sh` runs 9 suites, 2 of them Python unit tests; fixed in phases 01, 03
+- Failed: hook snippets and `test/skill-eval/analyze.py:356` call `okf-branch-setup.sh`; fixed in phases 01, 03
+- Failed: `actions/writer` owned by phases 02 and 04; `actionlint` not installed; fixed in phases 02, 03
+- Failed: `okf --version` prints JSON (`okf/cmd/okf/main.go:47-48`); fixed in phase 04
+- Failed: okfcli#37 reason, decision 16 reason, "2,500 lines", plan.md "tested fact" (research:503-505); fixed in place
+- Failed: phase 03 doc greps miss 11 of 17 workaround lines; phase 05 grep subjective, misses `okf_validate.py`; phase 06 cites design section 5 instead of research:327-328; research:471 cites the replaced plan; fixed in phases 03, 05, 06
+- Failed: phase 07 omits state-table row 1, "conflicting", and the "Merged" condition (research:347-353); fixed in phase 07
+- Failed: folder workflow pushes only `main` (`okf-tools/templates/folder-workflow.yml:10-11`); weak ready-for-review check; `gh run watch` without `--exit-status`; fixed in phases 04, 06, 08
+- Decided: strict validator (decision 19) — port to Go with a differential test

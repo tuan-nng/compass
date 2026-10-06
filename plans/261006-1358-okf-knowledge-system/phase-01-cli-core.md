@@ -22,12 +22,13 @@ Owns:
   - the validator (plan decision 19);
   - the bundle check;
   - hub assembly and the hub check;
-  - branch setup, with the same flags and hook snippets;
+  - branch setup, with the same flags; the hook snippets in `templates/hooks/` call `compass branch setup --print-hook` instead of the script;
   - app creation.
 - **The shared config and GitHub client packages** that phase 02 builds on. These land first.
-- **Moved from `okf-tools` at `9dcdd60` or later:** `config.env`, `pins/okf.env`, `templates/`, `testdata/`, `test/`, and the okf-skills reference copy with its license.
+- **Moved from the `okf-tools` working tree at `9dcdd60`:** `config.env`, `pins/okf.env`, `templates/` (without the two uncommitted pointer templates), `testdata/`, the committed bash `test/` suites and benches, and the okf-skills reference copy with its license and uv lock. The Python stamp and sync tests stay in `okf-tools` as phase 02's reference. Comments that cite the old plans' decision numbers are updated to this plan's numbers.
+- **`test/run-all.sh`,** reduced to the six suites below. The three other suites it runs today change owner: `stamp-unit.sh` and `sync-unit.sh` become Go tests in phase 02, and `install-tools.sh` becomes `test/setup.sh` in phase 03.
 
-The move is a copy. The old git history stays in `okf-tools` until phase 05 deletes it. The user's answer to the validator question at plan review comes first.
+The move is a copy. The old git history stays in `okf-tools` until phase 05 deletes it. The uncommitted files (`skill/`, `test/skill-eval*`, `test/install-tools.sh`, `bin/okf-tools-install`, `templates/AGENTS-pointer.md`, `templates/user-pointer.md`, `THIRD_PARTY.md`) exist only in the local `okf-tools` working tree; phase 03 moves or replaces them.
 
 ## Verification
 

@@ -17,7 +17,7 @@ Owns:
 
 - **Onboarding each repo,** following design section 4.8's folder-mode steps:
   - an `okf/` bundle with `overview.md`;
-  - the bundle-check action in CI;
+  - the bundle-check action in CI, from the folder-mode workflow template, with its push trigger set to the repo's default branch (the template lists `main`);
   - the pointer line in `AGENTS.md`;
   - a `repos.txt` row;
   - a `checks.txt` row where a push-triggered check exists;

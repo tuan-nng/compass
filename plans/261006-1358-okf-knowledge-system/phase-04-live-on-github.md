@@ -11,7 +11,7 @@ dependencies: [1, 2, 3]
 
 ## Overview
 
-Outcome: compass is pushed to the private `tuan-nng/compass`, and its Actions access opens to the account's private repos (plan decision 1).
+Outcome: the compass code is on the private `tuan-nng/compass` (which already holds the docs and plans on `master`), and its Actions access, `none` today, opens to the account's private repos (plan decision 1).
 
 A scratch hub, `tuan-nng/okf-scratch-hub`, is made the way an end user would make one (plan decision 4):
 
@@ -25,7 +25,7 @@ That hub, and all five scratch repos, then run their checks from compass actions
 Owns:
 
 - **`actions/bundle-check`, `actions/hub` and `actions/writer`.** Each sets up Go with a SHA-pinned `setup-go`, with its cache on, then builds and runs `compass` (plan decision 16).
-- **The first push of compass.** Before it, `git ls-files` must list only what compass means to publish (see the plan's Risks).
+- **The first push of compass code.** Before it, `git ls-files` must list only what compass means to publish (see the plan's Risks).
 - **`tuan-nng/okf-scratch-hub`** and the reader app.
 - **The workflow files in the five scratch repos:** `okf-scratch-bundle-check`, `okf-scratch-branch-mode`, `okf-scratch-billing-api`, `okf-scratch-shared-auth` and `okf-scratch-web-app`.
 - **Design doc and research report changes for plan decision 15.** Neither promises a hub trigger from repo pipelines any more:
@@ -34,7 +34,7 @@ Owns:
   - the section 8 row on a hub pull request waiting for an unmerged concept;
   - research report section 5, "Hub assembly and CI".
 
-  Also the design section 8 row on symlinked hubs, because the count check is now built.
+  Also the design section 8 row on symlinked hubs, because the count check is now built, and the places that say the 50-repo fetch time was not measured (design section 4.4 and section 7, N4), which now cite the bench and this phase's hub run.
 
 ## Verification
 
@@ -45,5 +45,5 @@ Owns:
 - On `okf-scratch-branch-mode`, the `okf` workflow on a PR into `okf/main` concludes `success`.
 - `gh workflow run hub -R tuan-nng/okf-scratch-hub`, then `gh run list -R tuan-nng/okf-scratch-hub -w hub -L 1 --json conclusion -q '.[0].conclusion'` prints `success`. The "build compass" step takes at most 60 s.
 - A draft hub PR that links a concept missing from every repo makes `gh pr checks <n> -R tuan-nng/okf-scratch-hub` exit non-zero.
-- Marking that draft ready starts a new run: `gh run list -R tuan-nng/okf-scratch-hub -w hub -e pull_request -L 1` shows it.
-- `compass setup --org tuan-nng --hub tuan-nng/okf-scratch-hub --yes` exits 0. `okf --version` then prints `0.5.0-tuan-nng.1`.
+- Marking that draft ready with `gh pr ready <n>` adds one run: `gh run list -R tuan-nng/okf-scratch-hub -w hub -e pull_request -c <head-sha> --json databaseId -q length` goes up by 1.
+- `compass setup --org tuan-nng --hub tuan-nng/okf-scratch-hub --yes` exits 0. `okf --version | jq -r .version` then prints `0.5.0-tuan-nng.1`.

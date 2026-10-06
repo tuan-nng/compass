@@ -41,11 +41,11 @@ The sync job's tested cases, beyond one test per state-table row:
 Owns:
 
 - the stamper, sync and front-matter packages;
-- `actions/writer` and the writer workflow template, which move to `templates/hub/` in phase 03;
-- the recorded fixtures moved from `okf-tools`.
+- the recorded fixtures moved from `okf-tools` (`test/stamp/fixtures/` and `test/sync/fixtures/`).
+
+The writer workflow template moves with `templates/` in phase 01 and into `templates/hub/` in phase 03. Phase 04 rewrites `actions/writer` to build `compass`.
 
 ## Verification
 
-- `go test ./...` exits 0. It covers every case above, including all 27 stamper tests and 25 sync tests in the Python suites at `9dcdd60`.
+- `go test ./...` exits 0. It covers every case above, including all 27 stamper tests (21 recorded-API, 6 front-matter) and 25 sync tests in the Python suites at `9dcdd60`.
 - `compass stamp --help` and `compass sync --help` list `--hub`, `--dry-run`, `--token-env` and `--api-url`. `sync` also lists `--ignore-login` and `--now`.
-- `actionlint` on the writer workflow template exits 0.
