@@ -1,0 +1,4 @@
+source-path=SCRIPTDIR
+external-sources=true
+# check() runs helper functions indirectly.
+disable=SC2317

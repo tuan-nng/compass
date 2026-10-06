@@ -1,0 +1,12 @@
+{
+  "permission": "read",
+  "role_name": "read",
+  "user": {
+    "login": "dave",
+    "id": 5550004,
+    "node_id": "U_5550004",
+    "type": "User",
+    "html_url": "https://github.com/dave",
+    "site_admin": false
+  }
+}

@@ -1,0 +1,6 @@
+# These files decide what runs with the writer key and what it touches.
+# Replace @OKF_HUB_OWNERS with the people or team who approve changes to them.
+/.github/   @OKF_HUB_OWNERS
+/CODEOWNERS @OKF_HUB_OWNERS
+/repos.txt  @OKF_HUB_OWNERS
+/checks.txt @OKF_HUB_OWNERS

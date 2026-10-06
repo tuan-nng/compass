@@ -1,0 +1,8 @@
+# okf branch mode: switch okf/ to the knowledge branch paired with this code
+# branch. Add these lines to .husky/post-checkout (husky runs it with sh -e).
+# Clones without okf/ or without compass on PATH skip it.
+# Also install reference-transaction from this folder, then run:
+#   compass branch setup --no-hooks
+if command -v compass >/dev/null 2>&1; then
+  sh -c "$(compass branch setup --print-hook post-checkout)" post-checkout "$@"
+fi

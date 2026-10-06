@@ -1,0 +1,12 @@
+{
+  "permission": "write",
+  "role_name": "write",
+  "user": {
+    "login": "carol",
+    "id": 5550003,
+    "node_id": "U_5550003",
+    "type": "User",
+    "html_url": "https://github.com/carol",
+    "site_admin": false
+  }
+}

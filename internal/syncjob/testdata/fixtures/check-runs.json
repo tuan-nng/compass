@@ -1,0 +1,38 @@
+{
+  "total_count": 1,
+  "check_runs": [
+    {
+      "id": 40000000001,
+      "name": "bundle-check",
+      "node_id": "CR_1",
+      "head_sha": "5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+      "external_id": "e1",
+      "url": "https://api.github.com/repos/acme/web-app/check-runs/40000000001",
+      "html_url": "https://github.com/acme/web-app/actions/runs/1/job/40000000001",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-04T09:01:00Z",
+      "completed_at": "2026-10-04T09:02:10Z",
+      "output": {
+        "title": null,
+        "summary": null,
+        "text": null,
+        "annotations_count": 0
+      },
+      "check_suite": {
+        "id": 50000000001
+      },
+      "app": {
+        "id": 15368,
+        "slug": "github-actions",
+        "node_id": "MDM6QXBwMTUzNjg",
+        "name": "GitHub Actions",
+        "owner": {
+          "login": "github",
+          "id": 9919,
+          "type": "Organization"
+        }
+      }
+    }
+  ]
+}

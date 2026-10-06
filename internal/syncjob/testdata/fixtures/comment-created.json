@@ -1,0 +1,18 @@
+{
+  "id": 6000000001,
+  "node_id": "IC_1",
+  "url": "https://api.github.com/repos/acme/web-app/issues/comments/6000000001",
+  "html_url": "https://github.com/acme/web-app/pull/42#issuecomment-6000000001",
+  "body": "created",
+  "user": {
+    "login": "okf-writer[bot]",
+    "id": 199000001,
+    "node_id": "U_199000001",
+    "type": "Bot",
+    "html_url": "https://github.com/okf-writer[bot]",
+    "site_admin": false
+  },
+  "created_at": "2026-10-06T00:30:00Z",
+  "updated_at": "2026-10-06T00:30:00Z",
+  "author_association": "NONE"
+}

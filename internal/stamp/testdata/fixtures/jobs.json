@@ -1,0 +1,49 @@
+{
+  "total_count": 2,
+  "jobs": [
+    {
+      "id": 31415926535,
+      "run_id": 11223344556,
+      "workflow_name": "contract",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/acme/billing-api/actions/runs/11223344556",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOGfq1B88AAAAHUWQ7Bw",
+      "head_sha": "3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+      "url": "https://api.github.com/repos/acme/billing-api/actions/jobs/31415926535",
+      "html_url": "https://github.com/acme/billing-api/actions/runs/11223344556/job/31415926535",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-05T09:05:12Z",
+      "started_at": "2026-10-05T09:05:20Z",
+      "completed_at": "2026-10-05T09:12:34Z",
+      "name": "contract test",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_name": "GitHub Actions 1000123456"
+    },
+    {
+      "id": 31415926536,
+      "run_id": 11223344556,
+      "workflow_name": "contract",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/acme/billing-api/actions/runs/11223344556",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOGfq1B88AAAAHUWQ7CA",
+      "head_sha": "3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+      "url": "https://api.github.com/repos/acme/billing-api/actions/jobs/31415926536",
+      "html_url": "https://github.com/acme/billing-api/actions/runs/11223344556/job/31415926536",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-05T09:05:12Z",
+      "started_at": "2026-10-05T09:05:18Z",
+      "completed_at": "2026-10-05T09:06:01Z",
+      "name": "lint",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_name": "GitHub Actions 1000123457"
+    }
+  ]
+}

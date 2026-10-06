@@ -1,0 +1,1 @@
+I want to change the response shape of POST /v2/invoices in billing-api. Before I do: who depends on that contract? My knowledge-hub checkout is at ../knowledge-hub. Do not change any files. End your answer with one line of the form `DEPENDENTS: <comma-separated concept ids>`, or `DEPENDENTS: none`.

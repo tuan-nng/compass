@@ -1,0 +1,30 @@
+{
+  "sha": "3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+  "node_id": "C_kwDOGfq1B9oAKDNmMmE5YzFk",
+  "url": "https://api.github.com/repos/acme/billing-api/git/commits/3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+  "html_url": "https://github.com/acme/billing-api/commit/3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+  "author": {
+    "name": "Alice Nguyen",
+    "email": "alice@acme.test",
+    "date": "2026-10-05T09:04:58Z"
+  },
+  "committer": {
+    "name": "GitHub",
+    "email": "noreply@github.com",
+    "date": "2026-10-05T09:04:58Z"
+  },
+  "tree": {
+    "sha": "9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c",
+    "url": "https://api.github.com/repos/acme/billing-api/git/trees/9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c"
+  },
+  "message": "Add retry budget to invoice client (#57)",
+  "parents": [
+    {
+      "sha": "1111111111111111111111111111111111111111"
+    }
+  ],
+  "verification": {
+    "verified": true,
+    "reason": "valid"
+  }
+}

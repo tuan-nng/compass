@@ -1,0 +1,38 @@
+[
+  {
+    "id": 3000000001,
+    "node_id": "PRR_1",
+    "user": {
+      "login": "carol",
+      "id": 5550003,
+      "node_id": "U_5550003",
+      "type": "User",
+      "html_url": "https://github.com/carol",
+      "site_admin": false
+    },
+    "body": "Reword the second line.",
+    "state": "CHANGES_REQUESTED",
+    "html_url": "https://github.com/acme/web-app/pull/42#pullrequestreview-3000000001",
+    "submitted_at": "2026-10-03T12:00:00Z",
+    "commit_id": "6666666666666666666666666666666666666666",
+    "author_association": "MEMBER"
+  },
+  {
+    "id": 3000000002,
+    "node_id": "PRR_2",
+    "user": {
+      "login": "carol",
+      "id": 5550003,
+      "node_id": "U_5550003",
+      "type": "User",
+      "html_url": "https://github.com/carol",
+      "site_admin": false
+    },
+    "body": "",
+    "state": "APPROVED",
+    "html_url": "https://github.com/acme/web-app/pull/42#pullrequestreview-3000000002",
+    "submitted_at": "2026-10-04T09:30:00Z",
+    "commit_id": "5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+    "author_association": "MEMBER"
+  }
+]

@@ -1,0 +1,43 @@
+openapi: 3.1.0
+info:
+  title: Invoice API
+  version: "2"
+paths:
+  /v2/invoices:
+    post:
+      summary: Create an invoice and charge the customer's default payment method.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Same key on every retry of one logical invoice. Kept for 48 hours.
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Invoice" }
+      responses:
+        "200":
+          description: The created invoice, or the stored response for a repeated key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+  /v2/invoices/{id}:
+    get:
+      summary: Read one invoice.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+components:
+  schemas:
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        customer_id: { type: string }
+        amount_cents: { type: integer }

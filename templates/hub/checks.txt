@@ -1,0 +1,8 @@
+# <repo-name> <workflow-file> <job-name> <process-actor> <concept-id>...
+# One row per machine check. The writer workflow stamps the listed concepts
+# with `verified: process:<actor>` after that job passes on a push to the
+# repo's default branch. Rows are split like shell words, so quote a job name
+# with spaces. <repo-name> is a name from repos.txt; <workflow-file> is a file
+# under the repo's .github/workflows/; concept ids have no .md.
+# Example:
+#   billing-api contract.yml "contract test" process:contract-test contracts/invoice-api

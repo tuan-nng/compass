@@ -1,0 +1,18 @@
+# okf branch mode hooks for lefthook. Add them to lefthook-local.yml, which
+# stays out of git, then run:
+#   lefthook install && compass branch setup --no-hooks
+# Needs compass on PATH. Checked by hand with lefthook 2.1.17: the
+# hooks pair and clean up okf/, but lefthook prints its banner on every ref
+# update, and "No config files ... have been found" for ref updates made
+# inside okf/, which has no lefthook config.
+post-checkout:
+  commands:
+    okf-branch:
+      run: sh -c "$(compass branch setup --print-hook post-checkout)" post-checkout {1} {2} {3}
+
+# git runs this hook on every ref update; the hook reads the updates on stdin.
+reference-transaction:
+  commands:
+    okf-branch:
+      use_stdin: true
+      run: sh -c "$(compass branch setup --print-hook reference-transaction)" reference-transaction {1}

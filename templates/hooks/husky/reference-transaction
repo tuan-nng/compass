@@ -1,0 +1,8 @@
+#!/bin/sh
+# okf branch mode: when code branch <b> is deleted, delete okf/<b> unless that
+# would lose work. husky v9 has no reference-transaction wrapper, so install
+# this file by hand, outside git, in husky's own folder (husky keeps .husky/_/
+# out of git and leaves files it did not write there alone):
+#   cp reference-transaction .husky/_/ && chmod +x .husky/_/reference-transaction
+command -v compass >/dev/null 2>&1 || exit 0
+exec sh -c "$(compass branch setup --print-hook reference-transaction)" reference-transaction "$@"

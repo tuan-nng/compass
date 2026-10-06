@@ -1,0 +1,28 @@
+{
+  "sha": "5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+  "node_id": "C_1",
+  "url": "https://api.github.com/repos/acme/web-app/git/commits/5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+  "author": {
+    "name": "Bob Tran",
+    "email": "bob@acme.test",
+    "date": "2026-10-04T08:59:00Z"
+  },
+  "committer": {
+    "name": "Bob Tran",
+    "email": "bob@acme.test",
+    "date": "2026-10-04T08:59:00Z"
+  },
+  "tree": {
+    "sha": "4444444444444444444444444444444444444444"
+  },
+  "message": "okf: add idempotency gotcha",
+  "parents": [
+    {
+      "sha": "e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0"
+    }
+  ],
+  "verification": {
+    "verified": false,
+    "reason": "unsigned"
+  }
+}

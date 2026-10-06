@@ -1,0 +1,75 @@
+{
+  "url": "https://api.github.com/repos/acme/web-app/pulls/41",
+  "id": 2100000041,
+  "html_url": "https://github.com/acme/web-app/pull/41",
+  "number": 41,
+  "state": "closed",
+  "locked": false,
+  "title": "Retry invoice creation with an idempotency key",
+  "user": {
+    "login": "bob",
+    "id": 5550002,
+    "node_id": "U_5550002",
+    "type": "User",
+    "html_url": "https://github.com/bob",
+    "site_admin": false
+  },
+  "body": "Adds retries to the invoice client.\n\nKnowledge: #42\n",
+  "created_at": "2026-10-03T10:00:00Z",
+  "updated_at": "2026-10-05T15:00:00Z",
+  "closed_at": "2026-10-05T15:00:00Z",
+  "merged_at": "2026-10-05T15:00:00Z",
+  "merge_commit_sha": "9999999999999999999999999999999999999999",
+  "draft": false,
+  "head": {
+    "label": "acme:feat/retry",
+    "ref": "feat/retry",
+    "sha": "7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+    "user": {
+      "login": "acme",
+      "id": 9912345,
+      "node_id": "U_9912345",
+      "type": "Organization",
+      "html_url": "https://github.com/acme",
+      "site_admin": false
+    },
+    "repo": {
+      "id": 82345678,
+      "name": "web-app",
+      "full_name": "acme/web-app",
+      "private": true,
+      "owner": {
+        "login": "acme",
+        "id": 9912345,
+        "type": "Organization"
+      },
+      "html_url": "https://github.com/acme/web-app"
+    }
+  },
+  "base": {
+    "label": "acme:main",
+    "ref": "main",
+    "sha": "8888888888888888888888888888888888888888",
+    "user": {
+      "login": "acme",
+      "id": 9912345,
+      "node_id": "U_9912345",
+      "type": "Organization",
+      "html_url": "https://github.com/acme",
+      "site_admin": false
+    },
+    "repo": {
+      "id": 82345678,
+      "name": "web-app",
+      "full_name": "acme/web-app",
+      "private": true,
+      "owner": {
+        "login": "acme",
+        "id": 9912345,
+        "type": "Organization"
+      },
+      "html_url": "https://github.com/acme/web-app"
+    }
+  },
+  "author_association": "MEMBER"
+}

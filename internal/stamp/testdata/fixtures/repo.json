@@ -1,0 +1,15 @@
+{
+  "id": 81234567,
+  "node_id": "R_kgDOGfq1Bw",
+  "name": "billing-api",
+  "full_name": "acme/billing-api",
+  "private": true,
+  "owner": {
+    "login": "acme",
+    "id": 9912345,
+    "type": "Organization"
+  },
+  "html_url": "https://github.com/acme/billing-api",
+  "default_branch": "main",
+  "url": "https://api.github.com/repos/acme/billing-api"
+}

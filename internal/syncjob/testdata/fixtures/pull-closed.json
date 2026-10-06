@@ -1,0 +1,7 @@
+{
+  "url": "https://api.github.com/repos/acme/web-app/pulls/42",
+  "number": 42,
+  "state": "closed",
+  "merged": false,
+  "merged_at": null
+}

@@ -1,0 +1,1 @@
+Before starting work in a git repo that has no `okf/` folder, run `git ls-remote origin okf/main`. If it prints a line, the repo keeps its knowledge on that branch: run `compass branch setup` in the repo root, then follow the OKF skill (`okf`) before reading or changing code.

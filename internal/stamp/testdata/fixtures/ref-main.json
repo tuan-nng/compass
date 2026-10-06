@@ -1,0 +1,10 @@
+{
+  "ref": "refs/heads/main",
+  "node_id": "REF_kwDOGfq1B7JyZWZzL2hlYWRzL21haW4",
+  "url": "https://api.github.com/repos/acme/billing-api/git/refs/heads/main",
+  "object": {
+    "sha": "3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+    "type": "commit",
+    "url": "https://api.github.com/repos/acme/billing-api/git/commits/3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+  }
+}

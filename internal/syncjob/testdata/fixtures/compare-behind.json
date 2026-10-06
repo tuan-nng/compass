@@ -1,0 +1,16 @@
+{
+  "url": "https://api.github.com/repos/acme/web-app/compare/e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0...5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+  "html_url": "https://github.com/acme/web-app/compare/e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0...5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+  "base_commit": {
+    "sha": "e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0"
+  },
+  "merge_base_commit": {
+    "sha": "5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d"
+  },
+  "status": "behind",
+  "ahead_by": 0,
+  "behind_by": 3,
+  "total_commits": 0,
+  "commits": [],
+  "files": []
+}

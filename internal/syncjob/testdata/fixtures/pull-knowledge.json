@@ -1,0 +1,75 @@
+{
+  "url": "https://api.github.com/repos/acme/web-app/pulls/42",
+  "id": 2100000042,
+  "html_url": "https://github.com/acme/web-app/pull/42",
+  "number": 42,
+  "state": "open",
+  "locked": false,
+  "title": "okf: idempotency key gotcha for feat/retry",
+  "user": {
+    "login": "bob",
+    "id": 5550002,
+    "node_id": "U_5550002",
+    "type": "User",
+    "html_url": "https://github.com/bob",
+    "site_admin": false
+  },
+  "body": "Knowledge for the retry change.\n",
+  "created_at": "2026-10-03T10:05:00Z",
+  "updated_at": "2026-10-04T09:00:00Z",
+  "closed_at": null,
+  "merged_at": null,
+  "merge_commit_sha": "7777777777777777777777777777777777777777",
+  "draft": false,
+  "head": {
+    "label": "acme:okf/feat/retry",
+    "ref": "okf/feat/retry",
+    "sha": "5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d",
+    "user": {
+      "login": "acme",
+      "id": 9912345,
+      "node_id": "U_9912345",
+      "type": "Organization",
+      "html_url": "https://github.com/acme",
+      "site_admin": false
+    },
+    "repo": {
+      "id": 82345678,
+      "name": "web-app",
+      "full_name": "acme/web-app",
+      "private": true,
+      "owner": {
+        "login": "acme",
+        "id": 9912345,
+        "type": "Organization"
+      },
+      "html_url": "https://github.com/acme/web-app"
+    }
+  },
+  "base": {
+    "label": "acme:okf/main",
+    "ref": "okf/main",
+    "sha": "e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0",
+    "user": {
+      "login": "acme",
+      "id": 9912345,
+      "node_id": "U_9912345",
+      "type": "Organization",
+      "html_url": "https://github.com/acme",
+      "site_admin": false
+    },
+    "repo": {
+      "id": 82345678,
+      "name": "web-app",
+      "full_name": "acme/web-app",
+      "private": true,
+      "owner": {
+        "login": "acme",
+        "id": 9912345,
+        "type": "Organization"
+      },
+      "html_url": "https://github.com/acme/web-app"
+    }
+  },
+  "author_association": "MEMBER"
+}

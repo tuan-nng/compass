@@ -1,0 +1,1 @@
+Add retries to the invoice client in billing-api (client/invoice.go). Then record what you learned in the repo's knowledge, including how long the server keeps idempotency keys. Leave the changes uncommitted on this branch.

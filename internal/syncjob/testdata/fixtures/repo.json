@@ -1,0 +1,14 @@
+{
+  "id": 82345678,
+  "name": "web-app",
+  "full_name": "acme/web-app",
+  "private": true,
+  "owner": {
+    "login": "acme",
+    "id": 9912345,
+    "type": "Organization"
+  },
+  "html_url": "https://github.com/acme/web-app",
+  "default_branch": "main",
+  "url": "https://api.github.com/repos/acme/web-app"
+}
