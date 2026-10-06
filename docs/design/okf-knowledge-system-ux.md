@@ -30,12 +30,15 @@ The main UX risks:
   agent without the hooks must pair `okf/` with its branch itself, and if the
   sync job stops, knowledge pull requests stay open after their code merges.
   `git pull` does not update `okf/`, so the agent pulls it before reading.
-- Until okfcli#34 is fixed, `okf validate` rejects the datetime `stale_after`
-  this design uses, and `okf show` says `stale: false` for such a concept even
-  after the date passes. A date-only value avoids both today but departs from
-  the spec (section 4.6).
+- Upstream okfcli rejects the datetime `stale_after` this design uses
+  (okfcli#34). Compass pins a patched fork, `tuan-nng/okf` release
+  `v0.5.0-tuan-nng.1`, which accepts it in `okf validate` and reports
+  `stale: true` in `okf show` once it passes. `compass setup` installs it. The
+  same patch is open upstream as okfcli#39; we drop the fork once upstream
+  releases a fix.
 
-Command output in this document is real. It comes from okfcli v0.5.0, run on
+Command output in this document is real. It comes from okfcli v0.5.0, or from
+the pinned fork `v0.5.0-tuan-nng.1` for `okf show` in section 4.1, run on
 the test data in the `okf-tools` repo: `testdata/fixture/`, rebuilt from the
 research protocol's planted facts, and, for hub queries, `testdata/proto/`, the
 same data with the report's conventions, assembled into a hub. `okf-tools`
@@ -122,7 +125,7 @@ flowchart LR
 
 | Actor | Uses | Never does |
 |---|---|---|
-| Coding agent | Six commands: `okf search`, `show`, `list`, `backlinks`, `index`, `validate` (the okf-skills validator stands in for `validate` until okfcli#34 is fixed). Plain file edits. In branch mode, `git -C okf` to check the paired branch, pull, commit, and push. | Adds a `verified` stamp, `human:` or `process:`; edits `knowledge-hub/repos/`; links from one repo bundle into another repo's files; pushes to `okf/main` directly |
+| Coding agent | Six commands: `okf search`, `show`, `list`, `backlinks`, `index`, `validate`. Plain file edits. In branch mode, `git -C okf` to check the paired branch, pull, commit, and push. | Adds a `verified` stamp, `human:` or `process:`; edits `knowledge-hub/repos/`; links from one repo bundle into another repo's files; pushes to `okf/main` directly |
 | Developer | Reads the markdown on GitHub or in an editor. Asks the agent. Runs the assembly script locally for cross-repo work. In branch-mode repos, runs the setup script once per clone. | Needs to learn the CLI to benefit |
 | Reviewer | The pull request diff, usually 1–3 knowledge files; in branch mode, the knowledge pull request linked from the code one. Adds one `verified` line in their own commit. | Approves a `verified: human:` line they did not write |
 | Repo CI | `okf_validate.py okf --strict` from okf-skills; then `okf index okf` and `test -z "$(git status --porcelain -- okf)"`, which fails if the committed index files are out of date. The branch-mode workflow runs the same checks on `.`, the bundle root. | Changes any files |
@@ -169,18 +172,15 @@ The task: "Add retries to the invoice client in billing-api."
    $ okf show okf gotchas/idempotency-key
    "description": "POST /v2/invoices double-charges on retry without Idempotency-Key.",
    "generated":   {"at": "2026-06-01T12:00:00Z", "by": "cursor/gpt-5.6"},
+   "stale": true,
    "stale_after": "2026-09-01T00:00:00Z",
-   "stale": false,            <- wrong: the date has passed (okfcli#34)
    "status": "draft",
    "trust_tier": "unverified"
    ```
 
-5. The concept is a draft, unverified and past its `stale_after` date.
-   `okf show` still says `stale: false` because of okfcli#34. Until that is
-   fixed, the skill tells the agent to compare `stale_after` with today's date
-   itself. The agent treats the concept as a lead to check, not a fact
-   (section 6). It reads the handler code and confirms that retries without
-   the key double-charge.
+5. The concept is a draft, unverified and stale. The agent treats it as a
+   lead to check, not a fact (section 6). It reads the handler code and
+   confirms that retries without the key double-charge.
 6. The agent writes the retry code, and it sends the key.
 
 This single read could prevent a double-charge bug. The agent still checked
@@ -211,13 +211,9 @@ steps are the same in both; section 4.9 adds the branch-mode commit and push.
    (section 4.4).
 3. If it learned something new, for example a retry budget, it writes a new
    file, `okf/gotchas/retry-budget.md`, with one concept in it.
-4. It runs `okf index okf` and the okf-skills validator
-   (`okf_validate.py okf --strict`), the same checks repo CI runs. That
-   validator passes on the edit above. `okf validate okf` rejects it
-   ("'stale_after' must be an absolute YYYY-MM-DD date"), so the agent uses it
-   only after okfcli#34 is fixed. Once the repo's index files exist (section
-   4.8), the research test of this path produced a 1–3 file diff (okfcli
-   evidence, test T7).
+4. It runs `okf index okf` and `okf validate okf`. Both pass on the edit
+   above. Once the repo's index files exist (section 4.8), the research test
+   of this path produced a 1–3 file diff (okfcli evidence, test T7).
 5. It does not add `verified`. The pull request description lists the
    knowledge files it changed, so the reviewer can find them. In branch mode
    the code pull request links the knowledge pull request instead.
@@ -356,22 +352,12 @@ when read on its own.
 | The agent cannot reach the code, such as another repo's internals | Sets `status: draft` and gives the reason in the body |
 
 `stale_after` is required for `API Contract` and `Gotcha`. The default is 180
-days. Once okfcli#34 is fixed, `okf show` reports `stale: true` for these
-concepts; until then the agent compares `stale_after` with today's date. Stale
-concepts come up as agents meet them during tasks, not in a separate cleanup
-job.
+days. `okf show` reports `stale: true` for these concepts once the date
+passes. Stale concepts come up as agents meet them during tasks, not in a
+separate cleanup job.
 
-**Open choice until okfcli#34 is fixed.** okfcli handles a date-only value
-such as `stale_after: 2027-03-28` correctly today: `okf show` reports
-`stale: true` once the date passes, and `okf validate` accepts it, warning
-only when the concept is stale. The okf-skills validator accepts it too, and
-the okf gem asks for it. Using it would remove the manual date comparison and
-let agents run `okf validate` directly. The cost: the spec defines
-`stale_after` as an absolute instant, and every timestamp as an ISO 8601
-datetime, so date-only values bend the spec. They would also need rewriting
-once the fix lands, unless the fixed okfcli keeps accepting them. This design
-keeps the spec's datetime form. Switching changes the skill's `stale_after`
-rule and drops the workarounds above.
+This design keeps the spec's datetime form of `stale_after`. Upstream okfcli
+accepts only a date-only value (okfcli#34); the pinned fork accepts both.
 
 ### 4.7 Renaming or moving a concept
 
@@ -584,8 +570,8 @@ rules:
 ## 6. How the agent decides what to trust
 
 The skill turns the fields on a concept into an action. Check the rows in
-order; the first match wins. "Stale" means `stale_after` is in the past; until
-okfcli#34 is fixed, the agent compares the date itself. A `verified` entry
+order; the first match wins. "Stale" means `stale_after` is in the past;
+`okf show` reports it as `stale: true`. A `verified` entry
 counts only if its `at` is at or after `generated.at` (section 5).
 
 | Concept | Agent behavior |
@@ -608,10 +594,10 @@ Two rules for backlinks:
 | Need | Mechanism | Evidence | What remains |
 |---|---|---|---|
 | N1: agents start informed | Skill step "before starting work", plus a pointer line in `AGENTS.md` (in branch mode, in user-level agent instructions); search, then list or show; trust rules in section 6 | Search 0.37 s and backlinks 0.34 s at 10,000 concepts; correct hits on the test data | Search hits lack trust and status, so the agent needs a second call; plain substring matching with no ranking |
-| N2: agents update knowledge in normal work | Plain file edits in the same pull request, or in a paired knowledge pull request in branch mode, then `okf index` and the validator | 1–3 file diffs; unknown frontmatter keys kept on disk; in branch mode, `okf/` followed every branch checkout on scratch repos | `okf index` overwrites hand-written `index.md` prose, so prose goes in `overview.md`; `okf validate` rejects datetime `stale_after` until okfcli#34 is fixed; branch mode needs the sync job, which is not built |
+| N2: agents update knowledge in normal work | Plain file edits in the same pull request, or in a paired knowledge pull request in branch mode, then `okf index` and `okf validate` | 1–3 file diffs; unknown frontmatter keys kept on disk; in branch mode, `okf/` followed every branch checkout on scratch repos | `okf index` overwrites hand-written `index.md` prose, so prose goes in `overview.md`; branch mode needs the sync job, which is not built |
 | N3: cheap human checks | Knowledge sits in the code diff, or in a knowledge pull request linked from it; one-line `verified` stamp; stamps removed when the claim changes; CI validation | A one-line verify diff; strict validator clean on the prototype | Nothing enforces who writes a `human:` stamp. Review is the only check; a later check could match the stamp's login against the pull request's approving reviewers (section 4.3). In branch mode the reviewer must open a second pull request, and knowledge waits until someone approves it. |
 | N4: cross-repo knowledge | Hub `Cross-Repo Dependency` concepts plus an assembled view of all repos, fetched from their remotes | 3 correct backlinks on the prototype hub, including the cross-repo edge; 50-repo copy in 2.9 s | The view is only as fresh as its last assembly; fetch time for 50 repos was not measured |
-| N5: current and portable | `stale_after`, `deprecated`, and agents fixing contradictions as they go; plain OKF files; skill depends on six commands | Every tool read the same files; a CLI swap only touches the skill | Staleness detection needs okfcli#34 fixed, or date-only `stale_after` values (section 4.6) |
+| N5: current and portable | `stale_after`, `deprecated`, and agents fixing contradictions as they go; plain OKF files; skill depends on six commands | Every tool read the same files; a CLI swap only touches the skill | Staleness detection relies on the pinned fork until upstream okfcli fixes okfcli#34 |
 
 ## 8. What users see when something breaks
 
@@ -619,7 +605,7 @@ Two rules for backlinks:
 |---|---|---|
 | Hub built with symlinks instead of copies | Validation passes but loads 0 repo concepts: a false pass | The assembly script only copies. Hub CI should fail when the concept count drops sharply [INFERENCE: not built]. |
 | Repo bundle uses a `/…` link | Passes in the repo, reported broken in the hub | Hub CI reports it. The skill forbids `/…` links in repo bundles. The re-run test data shows exactly this finding for `idempotency-key`. |
-| `stale_after` in the spec's datetime form (okfcli#34) | `okf validate` errors; `okf show` says `stale: false` for a stale concept | Fix upstream, or pin a patched fork before rollout. Date-only values work today but bend the spec (section 4.6). |
+| `stale_after` in the spec's datetime form, with upstream okfcli (okfcli#34) | `okf validate` errors; `okf show` says `stale: false` for a stale concept | Compass pins a patched fork, `v0.5.0-tuan-nng.1`, and `compass setup` installs it. The fork accepts datetimes and reports `stale: true`. |
 | Agent writes `verified: human:…` itself | Concept shows as `human-reviewed` | Caught only in review. The skill forbids it. |
 | Agent changes a reviewed concept but keeps its `verified` entry | Tools still show `human-reviewed` | The skill ignores a stamp older than `generated.at` (section 5). The reviewer sees the kept stamp in the diff. |
 | Hub pull request links a concept that is not merged yet | Hub CI fails on the broken link | Open the hub pull request as a draft and mark it ready after the repo pull request merges (section 4.5) |
@@ -639,19 +625,18 @@ Two rules for backlinks:
 ## 9. What does not exist yet
 
 These are needed before the journeys above work end to end. Section 8 of the
-report lists all but item 4.
+report lists all but item 3.
 
-1. A fix for okfcli#34, upstream or in a pinned fork. If the skill ever reads
-   custom frontmatter keys, also okfcli#35: `okf show` drops them.
-2. The skill: the section 6 outline in the report, plus sections 4.1–4.6,
-   4.9, 5 and 6 of this document written as agent instructions.
-3. The real assembly script, which fetches each bundle from the git remotes in
+1. The skill: the section 6 outline in the report, plus sections 4.1–4.6,
+   4.9, 5 and 6 of this document written as agent instructions. If the skill
+   ever reads custom frontmatter keys, also okfcli#35: `okf show` drops them.
+2. The real assembly script, which fetches each bundle from the git remotes in
    `repos.txt` (`okf/` or `okf/main`, by mode), and the hub CI job. The
    current script is a 15-line prototype that reads from a local workspace
    folder.
-4. The check job. The test data has one `process:ci-contract-test` stamp, but
+3. The check job. The test data has one `process:ci-contract-test` stamp, but
    nothing in this design wrote it.
-5. For branch mode:
+4. For branch mode:
    - the sync job;
    - the setup script on real repos. The hardened script
      (`okf-tools/bin/okf-branch-setup.sh`) passes every evidence case in
@@ -659,7 +644,7 @@ report lists all but item 4.
      `okf/main` workflow has run only on a scratch GitHub repo;
    - a way for CI and cloud agents to learn that a repo uses branch mode,
      likely organisation-level agent instructions.
-6. A pilot with 2–3 repos, at least one in each mode, measuring:
+5. A pilot with 2–3 repos, at least one in each mode, measuring:
    - how often agents write knowledge;
    - how often reviewers correct it;
    - how often agents run into stale concepts;

@@ -37,9 +37,12 @@ Main risks:
 - **Young tools.** Every OKF tool is at most four months old, and okfcli has
   2 contributors. The format is the durable part; the skill should depend on
   only six okfcli commands so the CLI can be swapped.
-- **One adoption blocker.** okfcli rejects `stale_after` written as the spec
-  requires (a datetime), filed upstream as [okfcli#34](https://github.com/okfcli/okf/issues/34).
-  It must be fixed upstream or patched in a pinned fork before rollout.
+- **Pinned fork of okfcli.** Upstream okfcli rejects `stale_after` written as
+  the spec requires (a datetime), filed as [okfcli#34](https://github.com/okfcli/okf/issues/34).
+  Compass pins a patched fork, `tuan-nng/okf` release `v0.5.0-tuan-nng.1`,
+  which accepts datetimes. The same patch is open upstream as
+  [okfcli#39](https://github.com/okfcli/okf/pull/39). We drop the fork once
+  upstream releases a fix.
 - **Assembly step.** The hub's view of the repos is only as fresh as its last
   assembly, so cross-repo answers can lag the repos by one CI run.
 - **Branch mode has more moving parts.** Knowledge changes in a second pull
@@ -149,7 +152,7 @@ backlinks matching an independent `grep`.
 
 | Tool | `verified` → trust level | `stale_after` as a spec datetime |
 |---|---|---|
-| okfcli | in `list` and `show`, not in search hits | **rejected as an error** ([#34](https://github.com/okfcli/okf/issues/34)) |
+| okfcli | in `list` and `show`, not in search hits | **rejected as an error** ([#34](https://github.com/okfcli/okf/issues/34)); accepted by the pinned fork `v0.5.0-tuan-nng.1` |
 | okfctl | not shown anywhere | ignored |
 | okf-mcp | in every search hit | rejected; it also refuses to update such concepts |
 | okn | in `list --json` | flagged as stale in `list` and `audit` |
@@ -219,7 +222,7 @@ Results:
 | Check | Result |
 |---|---|
 | okf-skills `--strict` on 3 repo bundles and the hub | all "conformant — no issues" |
-| okfcli `validate` on the same | clean, except the known `stale_after` bug (#34) |
+| okfcli `validate` on the same | clean, except the `stale_after` bug (#34) that the pinned fork fixes |
 | okfcli `backlinks` to `repos/billing-api/contracts/invoice-api` in the hub | 3 correct inbound links, including the cross-repo edge from `cross-repo/invoice-dependency` |
 | okfcli `list` in the hub | correct `status` and trust level for all 9 concepts |
 | Copy 50 repos (10,000 files) into a fresh hub | 2.87 s; re-copy with no changes 2.63 s |
@@ -392,8 +395,8 @@ The spec does not register types. This list is our own convention and can grow.
 - `verified` entries with `human:<github-login>` are added only by that
   person, in their own commit during review.
 - `stale_after` is required on `API Contract` and `Gotcha`. The default is 180
-  days after `generated.at`, written as a UTC datetime. It can be enforced once
-  okfcli#34 is fixed.
+  days after `generated.at`, written as a UTC datetime. `okf show` reports
+  `stale: true` once it passes.
 - Deprecate with `status: deprecated` instead of deleting, so inbound links
   keep resolving.
 
@@ -442,9 +445,7 @@ and `okf validate`.
    the same change. If code is not available, set `status: draft` and say why.
 4. **Before finishing:** record new knowledge by editing files directly. Use
    one file per concept and set the `generated` stamp. Then run
-   `okf index okf` and the okf-skills validator (`okf_validate.py okf
-   --strict`). Switch to `okf validate okf` once okfcli#34 is fixed; until
-   then it rejects the datetime `stale_after`.
+   `okf index okf` and `okf validate okf`.
    - In branch mode, commit inside `okf/`, push `<b>` and then `okf/<b>`, and
      open a knowledge pull request into `okf/main` linked from the code pull
      request.
@@ -472,11 +473,11 @@ and `okf validate`.
 | Google reference agent | Reads only BigQuery; tied to Gemini and GCP | Never for code repos |
 | MCP instead of CLI | Needs setup in every client, and the CLI already meets the speed targets | If an agent without a shell must use the knowledge |
 
-**Trade-offs.** The recommendation depends most on okfcli staying maintained
-and fixing #34. The first failure would be a spec-conformant `stale_after`
-turning every validate run red. The mitigation is to pin a patched fork. The
-date parsing sits in `internal/validate/v02.go:39` and needs only a small
-change there to accept datetimes as well. The second
+**Trade-offs.** The recommendation depends most on okfcli staying maintained.
+Upstream okfcli still rejects a spec-conformant `stale_after` (#34), so we pin
+a patched fork until upstream releases a fix. The patch is small: one helper,
+`concept.ParseStaleAfter`, reads a date or a datetime for both `okf validate`
+and the `stale` check (fork commit `c3af6be`). The second
 dependency is the hub assembly staying cheap. At 50 repos it takes 3 s, so
 the likely failure is staleness between assembly runs, not cost. The third,
 for branch-mode repos only, is the hub's sync job. If it stops, knowledge
@@ -495,18 +496,17 @@ bundle are relative, so they stay valid. [INFERENCE: not tested.]
 
 ## 8. Before adoption
 
-1. Get okfcli#34 fixed upstream, or pin a patched fork. Consider also
-   [okfcli#35](https://github.com/okfcli/okf/issues/35): `show` drops our own
-   frontmatter keys.
-2. Write the skill (section 6) and the assembly script for real. The prototype
-   script is a sketch.
-3. For branch mode: build the hub's sync job, check on GitHub that a workflow
+1. Write the skill (section 6) and the assembly script for real. The prototype
+   script is a sketch. If the skill ever reads our own frontmatter keys,
+   consider [okfcli#35](https://github.com/okfcli/okf/issues/35): `show`
+   drops them.
+2. For branch mode: build the hub's sync job, check on GitHub that a workflow
    stored only on `okf/main` runs for pull requests into it, harden the setup
    script (tested only on scratch repos), and agree the sync job's write
    access with each repo's maintainers. Decide how CI and cloud agents learn
    that a repo uses branch mode; organisation-level agent instructions are
    the likely place.
-4. Pilot with 2–3 repos, at least one in each mode, and measure how often
+3. Pilot with 2–3 repos, at least one in each mode, and measure how often
    agents write knowledge, how often reviewers correct it, how often stale
    concepts are hit, how often an edit removes a concept's `verified` stamp,
    and, in branch mode, how often a knowledge pull request is still open a
