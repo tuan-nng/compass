@@ -523,5 +523,8 @@ Full logs, with commands and real output, for each tool:
 [test protocol](okf-knowledge-system/evidence/protocol.md),
 [branch mode](okf-knowledge-system/evidence/branch-mode.md),
 [index files](okf-knowledge-system/evidence/index-files.md).
-The test data was generated under `/tmp/okf-research/`, and the protocol
-describes it.
+The original test data did not survive the research. The `okf-tools` repo
+rebuilds it from the protocol: `testdata/fixture/` holds the planted facts,
+`testdata/proto/` the same data with the section 5 conventions, and
+`test/gen-scale.sh` generates the scale set. `test/check-fixture.sh` checks
+every planted fact.

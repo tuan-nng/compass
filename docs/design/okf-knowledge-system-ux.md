@@ -35,11 +35,12 @@ The main UX risks:
   after the date passes. A date-only value avoids both today but departs from
   the spec (section 4.6).
 
-Command output in this document is real. It comes from okfcli v0.5.0, re-run
-for this document on the research test data (`/tmp/okf-research/fixture`) and,
-for hub queries, on the prototype built with the report's conventions
-(`/tmp/okf-research/proto/ws`). Branch-mode output comes from scratch repos
-([evidence](../research/okf-knowledge-system/evidence/branch-mode.md)). The
+Command output in this document is real. It comes from okfcli v0.5.0, run on
+the test data in the `okf-tools` repo: `testdata/fixture/`, rebuilt from the
+research protocol's planted facts, and, for hub queries, `testdata/proto/`, the
+same data with the report's conventions, assembled into a hub. `okf-tools`
+checks both sets with `test/check-fixture.sh`. Branch-mode output comes from
+scratch repos ([evidence](../research/okf-knowledge-system/evidence/branch-mode.md)). The
 skill, the fetching assembly script, the hub CI job, the sync job and the
 check job are proposals. The branch-mode setup script is a sketch. Section 9
 lists what does not exist yet.
