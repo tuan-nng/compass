@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Branch-mode setup script and okf/main CI"
-status: pending
+status: completed
 priority: P2
 effort: 2d
 dependencies: [1]

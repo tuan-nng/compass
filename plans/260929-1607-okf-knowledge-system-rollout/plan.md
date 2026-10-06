@@ -1,12 +1,13 @@
 ---
 title: "OKF knowledge system: build and pilot"
 description: "Build every missing piece of the OKF knowledge system design and pilot it on real repos, folder mode first, then branch mode."
-status: pending
+status: in-progress
 priority: P1
 effort: 20.5d build + 4-week pilot per mode
 branch: main
 tags: [okf, knowledge, agents, tooling]
 created: 2026-09-29
+blocked_by: [261006-1351-compass-go-cli]
 ---
 
 # OKF knowledge system: build and pilot
@@ -208,13 +209,13 @@ Every hop after the merge runs in the background; nothing blocks the developer.
 
 | # | Milestone | Phase | Outcome | Status |
 |---|---|---|---|---|
-| 01 | M1 | [phase-01-tooling-foundation.md](phase-01-tooling-foundation.md) | `okf-tools` exists, with rebuilt test data, the pinned install and the bundle-check action; the design doc's command output matches the rebuilt data | pending |
-| 02 | M1 | [phase-02-okfcli-fork.md](phase-02-okfcli-fork.md) | The pinned `okf` fork accepts datetime `stale_after`; the upstream pull request is open | pending |
+| 01 | M1 | [phase-01-tooling-foundation.md](phase-01-tooling-foundation.md) | `okf-tools` exists, with rebuilt test data, the pinned install and the bundle-check action; the design doc's command output matches the rebuilt data | completed |
+| 02 | M1 | [phase-02-okfcli-fork.md](phase-02-okfcli-fork.md) | The pinned `okf` fork accepts datetime `stale_after`; the upstream pull request is open | completed |
 | 03 | M2 | [phase-03-agent-skill.md](phase-03-agent-skill.md) | The skill is installed and agents pass the scenario checks on the test data | pending |
 | 04 | M3 | [phase-04-hub-assembly.md](phase-04-hub-assembly.md) | `knowledge-hub` and the reader app exist; the hub assembles every repo from its remote and fails on broken or empty bundles | pending |
 | 05 | M4 | [phase-05-check-job.md](phase-05-check-job.md) | The writer app exists, and the stamper writes `process:` stamps only for covered concepts | pending |
 | 06 | M4 | [phase-06-folder-pilot.md](phase-06-folder-pilot.md) | 1–2 folder-mode repos are live and the metrics script reports on them | pending |
-| 07 | M5 | [phase-07-branch-setup.md](phase-07-branch-setup.md) | The setup script passes every branch-mode case automatically, and the `okf/main` workflow runs on GitHub | pending |
+| 07 | M5 | [phase-07-branch-setup.md](phase-07-branch-setup.md) | The setup script passes every branch-mode case automatically, and the `okf/main` workflow runs on GitHub | completed |
 | 08 | M5 | [phase-08-sync-job.md](phase-08-sync-job.md) | The sync job carries out every state-table row against scratch GitHub repos | pending |
 | 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | One branch-mode repo is live, and CI and cloud agents learn which repos use branch mode | pending |
 | 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics and a roll-out decision is committed to `compass` | pending |
