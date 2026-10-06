@@ -466,6 +466,7 @@ and `okf validate`.
 | okn | Telemetry on by default; 5.9 s search at 10,000 concepts | If the telemetry defaults change and it gains a persistent index |
 | Basic Memory | Not OKF: wikilinks by title, no `verified` field, SQLite index, AGPL-3.0 | If human verification and portability matter less than memory-style recall |
 | llm-wiki (omp extension) | Works only in omp; no human verification workflow | Personal notes inside omp; it has an OKF v0.2 mode |
+| [OpenKB](https://github.com/VectifyAI/OpenKB) (v0.5.0-rc1, Python; source reviewed 2026-10-06, not installed) | It compiles documents into a wiki through an LLM, so every write needs an LLM pass and its skill forbids agent edits. No `verified` or `stale_after`; `recompile` overwrites manual edits; no links between knowledge bases and no git integration; OKF v0.1 with `[[wikilinks]]`; `openkb lint` always exits 0 | As a one-off tool that drafts concepts from existing prose docs (PDFs, Office files) for human review, if the pilot shows bundles are too sparse (rollout plan decision 16) |
 | Google reference agent | Reads only BigQuery; tied to Gemini and GCP | Never for code repos |
 | MCP instead of CLI | Needs setup in every client, and the CLI already meets the speed targets | If an agent without a shell must use the knowledge |
 
