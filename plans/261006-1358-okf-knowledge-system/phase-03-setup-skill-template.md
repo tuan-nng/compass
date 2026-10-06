@@ -52,6 +52,11 @@ Claude Code and omp run headless. Cursor has no CLI, so it is checked once by ha
 
 It holds no knowledge, and it passes `compass validate` as shipped.
 
+Since the 2026-10-06 re-plan (plan decisions 3, 7 and 14–16), phase 04 makes these changes:
+- it takes the hub and writer workflows and the app and protection steps out of this template;
+- it changes the skill's hub pull request step to a local re-check;
+- it replaces setup's org prompt with a hub clone folder.
+
 Owns:
 
 - the setup package, which replaces the uncommitted `bin/okf-tools-install`;

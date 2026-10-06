@@ -14,16 +14,16 @@ created: 2026-10-06
 ## Overview
 
 **Problem:** The design in `docs/design/okf-knowledge-system-ux.md` is complete on paper, but most of it doesn't run yet. What runs today is a set of bash and Python scripts spread over a separate tooling repo, `tuan-nng/okf-tools`, plus a hub repo the project owns, `tuan-nng/knowledge-hub`. There is no single entry point.
-**Change:** Put all tooling into compass as one Go binary, `compass`. People clone compass, build it, and run `compass setup`, which asks for the knowledge hub they provide. Compass ships a hub template instead of owning a hub. Then finish the remaining pieces (the skill, the check job, the sync job) and pilot the system, folder mode first and branch mode later.
-**Why this way:** The user chose compass as the only code home, a Go binary, and an end-user hub (decisions 1–4). The strongest rejected alternative kept the tested scripts behind a thin `compass` wrapper. It needs no rewrite, but users would need bash, Python and uv, and there would be no build step. The main risk is behavior lost in the rewrite, so the existing test suites carry over as end-to-end checks against the binary.
+**Change:** Put all tooling into compass as one Go binary, `compass`. People clone compass, build it, and run `compass setup`, which asks for the knowledge hub they provide. Compass ships a hub template instead of owning a hub. Everything except one merge gate runs on people's machines: the only GitHub Actions job is the bundle check on each repo's pull requests. Then finish the remaining pieces (the skill, the stamper, the sync job) and pilot the system, folder mode first and branch mode later.
+**Why this way:** The user chose compass as the only code home, a Go binary, an end-user hub, and local-first operation (decisions 1–4 and 13–16). The strongest rejected alternative kept the tested scripts behind a thin `compass` wrapper. It needs no rewrite, but users would need bash, Python and uv, and there would be no build step. There are two main risks. Behavior could be lost in the rewrite, so the existing test suites carry over as end-to-end checks against the binary. Stamps and merges wait until someone runs them, and the pilot measures that delay.
 
 The work is grouped into five milestones. Each one leaves something usable behind:
 
 | Milestone | What works when it closes |
 |---|---|
 | M1 One tool | `compass` builds from a clone, replaces every script, and passes every test the scripts passed. |
-| M2 Live on GitHub | `compass setup` connects a machine to a hub. A hub made from the template, and the scratch repos, run green on compass actions. `okf-tools` and `knowledge-hub` are gone. |
-| M3 Writers live | In the company org, the check job writes `process:` stamps and the sync job merges knowledge pull requests. |
+| M2 Live on GitHub | `compass setup` connects a machine to a hub. Compass's bundle-check action gates the scratch repos' pull requests, and a hub made from the template assembles and checks on a developer machine. `okf-tools` and `knowledge-hub` are gone. |
+| M3 Writers live | `compass stamp` and `compass sync`, run from a developer machine, write `process:` stamps and carry out the sync rules on the scratch repos. Compass is public, so any account's repos can use its action. |
 | M4 Folder-mode pilot | 1–2 real folder-mode repos are live, and pilot metrics are collected. |
 | M5 Branch mode and read-out | A branch-mode repo is live, and the read-out decides whether to roll out further. |
 
@@ -50,7 +50,7 @@ All of this was verified on 2026-10-06. Code paths refer to `okf-tools`, which p
 - **Hub assembly, not yet live.**
   - Built: the assembly script, the hub check, the hub action and workflow template, and the GitHub App helper.
   - `test/assemble.sh` passes. `bench-assemble.sh 50` runs in 5.0 s cold and 5.0 s warm.
-  - Scratch repos `okf-scratch-billing-api`, `okf-scratch-shared-auth` and `okf-scratch-web-app` exist. No hub CI run has happened.
+  - Scratch repos `okf-scratch-billing-api`, `okf-scratch-shared-auth` and `okf-scratch-web-app` exist. No assembly from GitHub has run.
 - **Code with no live run yet.**
   - The stamper and sync job in Python: 27 stamper tests (21 on recorded API responses, 6 front-matter unit tests) and 25 sync tests on recorded API responses, `okf-tools` `783c201`..`9dcdd60`. These commits are local only: GitHub's `okf-tools` stops at `fa42d76`.
   - The skill, the installer, the pointer lines and the skill-eval harness: uncommitted in `okf-tools`.
@@ -59,23 +59,19 @@ All of this was verified on 2026-10-06. Code paths refer to `okf-tools`, which p
 
 Confirmed with the user:
 
-1. **Code home: compass.** All tooling code, actions, templates, test data and the skill live in compass. Compass is already the private `tuan-nng/compass` on GitHub (default branch `master`), holding only docs and plans. The code is pushed there, and its Actions access opens to the account's private repos. Rejected alternatives:
+1. **Code home: compass.** All tooling code, the action, templates, test data and the skill live in compass. Compass is already the private `tuan-nng/compass` on GitHub (default branch `master`), holding only docs and plans. The code is pushed there, and its Actions access opens to the account's private repos until compass goes public (decision 21). Rejected alternatives:
    - a separate tooling repo, which means two places to clone and keep in step;
    - keeping compass local and publishing actions from a second repo.
 2. **One Go binary.** `compass` replaces every script with a subcommand. It uses only the Go standard library and `gopkg.in/yaml.v3`, the YAML library okfcli already uses. The rejected alternative was a thin wrapper around the existing bash and Python.
 3. **The end user provides the hub; setup connects to it.** Compass owns no hub repo. It owns the hub format: the layout, the `repos.txt` and `checks.txt` formats, and a hub template folder with:
-   - the workflows, `CODEOWNERS` and `.gitignore`;
-   - an overview concept explaining how to fill the hub in.
+   - `CODEOWNERS` and `.gitignore`;
+   - an overview concept explaining how to fill the hub in and run it.
 
-   An end user copies the template into their own repo and creates the reader and writer GitHub Apps with `compass app create`. `compass setup` asks for the org and that hub repo, and checks the hub is readable. It records them in the user's config, installs the pinned `okf`, and installs the skill into each agent's user-level skill folder. The same command, with flags instead of prompts, sets up CI and cloud agents. The rejected alternative created the hub during setup, which puts org-admin work in every developer's setup.
+   An end user copies the template into their own repo. `compass setup` asks for that hub repo and for a folder to clone it into, defaulting to `~/src/<repo>`; `--hub` and `--hub-dir` skip the prompts. It reuses an existing clone of the same repo, clones it otherwise, and stops before writing anything if the hub isn't readable. It records the hub and its folder in the user's config, installs the pinned `okf`, and installs the skill into each agent's user-level skill folder. Hub work happens in that clone, and the hub commands use it unless given another folder. How compass itself reaches a developer machine is out of scope; `make install` is one way. The same command, with flags instead of prompts, sets up CI and cloud agents. The rejected alternative created the hub during setup, which puts org-admin work in every developer's setup.
 4. **Delete `okf-tools` and `tuan-nng/knowledge-hub`** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For live checks, a scratch hub, `tuan-nng/okf-scratch-hub`, plays the end user's hub. It is created from the template alone, which proves the template works. The rejected alternative archived both repos.
-5. **okfcli#34: a pinned, patched fork** (`<org>/okf`), with the same patch sent upstream. The fork stays separate from compass. okfcli keeps its code under `internal/`, so Go doesn't let compass import it, and `compass` installs and calls the pinned `okf` binary instead. We drop the fork once upstream releases a fix. The rejected alternative was date-only `stale_after`, which departs from the spec (design section 4.6).
+5. **okfcli#34: a pinned, patched fork** (`tuan-nng/okf`, public), with the same patch sent upstream. `pins/okf.env` names the release repo with the tag and checksums. The fork stays separate from compass. okfcli keeps its code under `internal/`, so Go doesn't let compass import it, and `compass` installs and calls the pinned `okf` binary instead. We drop the fork once upstream releases a fix. The rejected alternative was date-only `stale_after`, which departs from the spec (design section 4.6).
 6. **Mode order.** Folder mode pilots first (M4), and branch mode joins in M5. The rejected alternative piloted both at once, which would delay the first pilot until the sync job is live.
-7. **The org name is configuration.**
-   - `config.env` in compass holds `OKF_ORG`, and an `OKF_ORG` environment variable overrides it.
-   - Hub actions take the repository owner.
-   - The okf release repo is derived as `$OKF_ORG/okf`.
-   - The phases run under the personal account `tuan-nng` until the company org exists. Phase 06 moves compass and the fork there.
+7. **No org setting (revised 2026-10-06).** The hub repo is the only thing a user names. `repos.txt` may list any `https://github.com/<owner>/<repo>` URL, so a hub can span accounts. The workflow templates name the compass repo by placeholder. Accepted cost: a reviewed `repos.txt` line can make every developer's assembly fetch any GitHub repo; its bundle is untrusted text either way (Design, Trust boundaries). The rejected alternative, the decision before revision, set `OKF_ORG` in `config.env` or the user config and limited `repos.txt` to that account. It made every user know an org name, and it blocked hubs spanning accounts.
 8. **Pilot repos are chosen when phase 08 starts,** after M1–M2 give maintainers a working demo. They should be repos whose contract or schema test runs as a GitHub Actions job on pushes to the default branch (decision 13).
 9. **CI and cloud agents find branch-mode knowledge through the skill plus a pointer line.** `compass setup` runs in every CI and cloud agent environment. Each platform's organisation-level instructions get one line: check `git ls-remote origin okf/main`, and follow the OKF skill if that branch exists. The rejected alternatives:
    - the skill alone, which has no trigger in a fresh clone without `okf/`;
@@ -87,24 +83,37 @@ Confirmed with the user:
 12. **Quality targets.** Each is checked in the phase that owns it:
     - pinned `okf` on the 10,000-concept hub: median validate under 10 s, search under 2 s, backlinks under 2 s;
     - assembling 50 repos from local bare remotes: under 5 min cold, under 60 s warm;
-    - an approved, green knowledge pull request merges within 2 sync runs after its code pull request merges;
+    - an approved, green knowledge pull request merges on the first `compass sync` run after its code pull request merges;
     - building `compass` in a CI job takes at most 60 s.
 
-Decided in planning:
+Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user chose local-first operation with one CI gate. Each revised decision keeps the version it replaced as a rejected alternative.
 
-13. **The check job runs from the hub, for both modes.** It uses the GitHub API to find a named workflow job on the head commit of the repo's default branch. If that job passed, it stamps the concepts the check covers. The hub keeps the list of covered concepts under CODEOWNERS review, so a repo pull request cannot stamp itself. The rejected alternative ran the job in each repo's CI after merge. That needs a write credential and a workflow file in every repo, which branch-mode code branches can't hold.
-14. **Two GitHub Apps.**
-    - The reader app can only read repo contents; hub pull request CI uses it.
-    - The writer app can push contents, manage pull requests and read Actions results. Only the sync job and the check job use it, and its key lives in a GitHub environment that only the hub's default branch can use.
+13. **The stamper and the sync job run on a person's machine, for both modes.** A hub owner runs `compass sync` and `compass stamp` with their own GitHub token, on demand; during the pilot, each working day.
+    - The sync job keeps its merge conditions (Design, Trust boundaries), and that person makes the merge.
+    - The stamper uses the GitHub API to find a named workflow job on the head commit of the repo's default branch. If that job passed, it stamps the concepts the check covers, in a commit made by that person.
+    - The hub keeps the list of covered concepts under CODEOWNERS review, so a repo pull request cannot stamp itself.
+    - The stamper pushes straight to the default branch (or `okf/main`), so the person who runs it needs a ruleset bypass on each protected repo. When protection refuses the push, the stamper says so, instead of reporting that the branch moved. The rejected alternatives were a pull request per stamp, which adds review load and changes the stamper's output, and no `process:` stamps in the pilot.
 
-    The rejected alternative, one app, lets any hub branch mint a write token for every pilot repo.
-15. **No repo pipeline triggers the hub.** Hub CI runs nightly, on manual dispatch, and on hub pull requests. A hub pull request that waits on a repo change goes green when its author re-runs its check after that change merges, and the skill says so. The rejected alternative needs a hub write credential in every pilot repo.
-16. **The CI entry points are composite actions that build `compass` from source.** Callers pin each action by commit SHA. The action sets up Go with a SHA-pinned `actions/setup-go`, with its build cache on, and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. Rejected alternatives:
+    Accepted cost: a `process:` stamp commit made by a person looks like any other commit, so there's no bot identity to tell it apart from a hand-written stamp. `compass stamp --dry-run` re-derives each stamp from the API evidence. Rejected alternatives:
+    - a scheduled hub workflow with a writer app (the decision before revision). Stamps carry a bot identity, but it needs a stored write key, plus rulesets and environments that GitHub Free refuses on private repos;
+    - running the job in each repo's CI after merge. That needs a write credential and a workflow file in every repo, which branch-mode code branches can't hold.
+14. **No GitHub Apps.** Every compass command uses its caller's own GitHub credentials, so it can do only what that person can. The rejected alternative, a reader app for hub CI and a writer app for the writer workflow (the decision before revision), served only the hub-side Actions that decision 15 removes.
+15. **The hub has no CI, and no repo pipeline triggers it.** Cross-repo checks run where people read: `compass hub assemble`, then `compass hub check`. The agent runs them before it opens a hub pull request, and the reviewer runs them before approving. A hub pull request that waits on a repo change is checked again locally after that change merges, and the skill says so. Accepted cost: nothing reports a broken cross-repo link until someone assembles. Rejected alternatives:
+    - hub CI nightly, on manual dispatch and on hub pull requests (the decision before revision). It needs the reader app and Actions in the hub;
+    - no Actions anywhere, with the bundle check as a git hook. Hooks don't run for cloud agents, CI agents, web edits or `--no-verify`, so stale or invalid bundles would reach the default branches every reader assembles.
+16. **The only CI entry point is `actions/bundle-check`,** a composite action that builds `compass` from source. Callers pin it by commit SHA. It sets up Go with a SHA-pinned `actions/setup-go`, with its build cache on, and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. Rejected alternatives:
     - release binaries: faster, but a second pin and a release pipeline;
     - reusable workflows: a called workflow runs with its caller's token, which can't check out a private compass to build it.
 17. **Neutral module path.** The Go module is named `compass`, so no account name appears in the code (decision 7). People build from a clone with `make install`. The rejected alternative, `github.com/<org>/compass`, hard-codes today's account into every import.
 18. **Old test suites become end-to-end checks.** The bash suites move to compass and drive the built binary, so the cases stay and only the commands change. The recorded-API tests become Go tests on the same JSON fixtures. The rejected alternative rewrote everything as Go unit tests and loses the black-box evidence.
 19. **Strict validator: port it to Go** (confirmed by the user on 2026-10-06). The vendored okf-skills validator is 573 lines of Python, MIT-licensed, parsing YAML with pyyaml. It becomes a Go package behind `compass validate`. A differential test runs both versions on the fixture, the prototype hub and a set of broken bundles, and requires the same findings. The Python copy stays as a test-only reference. Rejected alternatives: running Python under uv at runtime, which needs Python and uv everywhere; and dropping it for `okf validate`, which loses findings only the strict validator reports, such as a missing frontmatter block.
+20. **A stats repo holds pilot results (2026-10-06).** `compass setup` optionally takes a stats repo, cloned the same way as the hub. `compass pilot report` computes the metrics from GitHub pull requests and git history and writes its report into that clone, where it can be shared. The read-out lives there too, because compass goes public and pilot data names private repos. Nothing is recorded on developer machines. Rejected alternatives:
+    - usage events recorded by each compass install: telemetry, a new data format, and a push from every machine;
+    - committing metrics to compass, which becomes public.
+21. **Compass goes public before the pilot (2026-10-06).** Then pilot repos in any account can run `actions/bundle-check`, pinned by SHA, with no org move and no org name. Rejected alternatives:
+    - moving compass to the pilot repos' account, which ties compass to one org;
+    - building compass in each workflow with a token secret in every pilot repo;
+    - piloting only on repos under `tuan-nng`.
 
 ## Design
 
@@ -117,27 +126,27 @@ Decided in planning:
   - `bundle check`;
   - `hub assemble` and `hub check`;
   - `branch setup`;
-  - `app create`;
   - `stamp` and `sync`;
   - `pilot report`;
   - `version`.
-- **Composite actions:** `actions/bundle-check`, `actions/hub` and `actions/writer`, which build `compass` and run one subcommand each (decision 16).
+- **Composite action:** `actions/bundle-check`, which builds `compass` and runs `compass bundle check` (decision 16).
 - **Templates:**
   - repo workflows for folder mode and `okf/main`;
   - hook snippets and agent pointer lines;
   - `templates/hub/`, the hub template (decision 3).
 - **The skill,** `skill/okf/SKILL.md`, embedded in the binary.
-- **Pins and config:** `pins/okf.env` and `config.env`, embedded at build time.
+- **Pins:** `pins/okf.env`, embedded at build time. It names the fork's release repo, tag and checksums.
 - **Test data and suites:** `testdata/` and `test/`, moved from `okf-tools`.
-- **`<org>/okf` fork:** release binaries with checksums. It adds only datetime `stale_after`.
-- **The end user's hub,** made from the template. It holds `repos.txt`, `checks.txt`, cross-repo concepts and the workflows that call compass actions. It holds the reader and writer app credentials, and git ignores its assembled `repos/` folder.
+- **`tuan-nng/okf` fork:** release binaries with checksums. It adds only datetime `stale_after`.
+- **The end user's hub,** made from the template. It holds `repos.txt`, `checks.txt` and cross-repo concepts. It holds no workflows and no credentials, and git ignores its assembled `repos/` folder.
 - **Pilot repos.** Each owns its bundle: `okf/` on its code branches, or its `okf/…` branches.
+- **The stats repo,** any repo the pilot team names. It holds `compass pilot report` output and the read-out (decision 20).
 
 **Interfaces:**
 
 - **Pinned `okf`.** The same commands and JSON as okfcli v0.5.0. `stale_after` takes an RFC 3339 datetime or a date, and `okf show` reports `.concept.stale: true` once it has passed.
 - **`compass bundle check <dir>`.** Fails on a strict-validator finding or an out-of-date index.
-- **`compass hub assemble [--ci|--local] <hub>`.** Reads `repos.txt` lines of the form `<name> <URL> <folder|branch>`, and accepts only `https://github.com/$OKF_ORG/` URLs. It keeps a clone cache, writes `repos/<name>/`, and removes repos no longer listed. It exits non-zero and names the repo when:
+- **`compass hub assemble [--ci|--local] [<hub>]`.** The hub folder defaults to the clone recorded by `compass setup`; the same default applies to `hub check`, `stamp --hub` and `sync --hub`. Reads `repos.txt` lines of the form `<name> <URL> <folder|branch>`, and accepts any `https://github.com/<owner>/<repo>` URL. It keeps a clone cache, writes `repos/<name>/`, and removes repos no longer listed. It exits non-zero and names the repo when:
   - fetching fails;
   - the bundle is empty;
   - the bundle holds a symlink.
@@ -150,17 +159,17 @@ Decided in planning:
 
   It pushes only as a fast-forward. In branch mode it stamps `okf/main`.
 - **`compass sync`.** Carries out the branch-mode state table (research report section 5) over every branch-mode repo, with dry-run. It merges only under the conditions in Trust boundaries.
-- **`compass setup`.** Prompts for the org and hub, or takes `--org`, `--hub` and `--yes`. If the hub isn't readable it writes nothing.
-- **`compass pilot report`.** Reports the five metrics from design section 9, item 5, per repo, for a date window.
+- **`compass setup`.** Prompts for the hub repo, its clone folder and an optional stats repo, or takes `--hub`, `--hub-dir`, `--stats`, `--stats-dir` and `--yes`. If the hub isn't readable it writes nothing. `--org` is gone (decision 7).
+- **`compass pilot report`.** Reports the five metrics from design section 9, item 5, per repo, for a date window, and writes the report into the stats clone.
 
 **Data:**
 
 - Concepts belong to each repo.
-- `repos.txt`, `checks.txt`, `CODEOWNERS` and `.github/` belong to the end user's hub, and every change needs code-owner review.
-- The user config (`$XDG_CONFIG_HOME/compass/config`) holds the org and hub for one machine. CI never reads it.
+- `repos.txt`, `checks.txt` and `CODEOWNERS` belong to the end user's hub, and every change needs code-owner review.
+- The user config (`$XDG_CONFIG_HOME/compass/config`) holds the hub, the stats repo and their clone folders for one machine. CI never reads it.
 - The clone cache is per machine.
 - Sync state is not persisted. Each comment carries a hidden marker, so the next run doesn't repeat it.
-- Pilot metrics are committed to compass at the read-out.
+- Pilot metrics and the read-out live in the stats repo (decision 20).
 
 **Flow, folder mode:**
 
@@ -168,8 +177,8 @@ Decided in planning:
 2. The bundle check runs.
 3. A reviewer approves and may add a `human:` stamp.
 4. The pull request merges.
-5. The nightly hub run assembles the change.
-6. The writer workflow, every 30 minutes, commits `process:` stamps through the writer app's ruleset bypass.
+5. The next local assembly, by any developer or agent, picks the change up.
+6. A hub owner's next `compass stamp` run commits `process:` stamps for the covered concepts.
 
 **Flow, branch mode:**
 
@@ -177,37 +186,30 @@ Decided in planning:
 2. The `okf/main` workflow checks the knowledge pull request.
 3. A reviewer approves both.
 4. The code pull request merges.
-5. The next writer run's sync step merges the knowledge pull request with a merge commit.
-6. The stamper step stamps `okf/main`.
-7. The hub assembles `okf/main`.
+5. A hub owner's next `compass sync` run merges the knowledge pull request with a merge commit.
+6. Their next `compass stamp` run stamps `okf/main`.
+7. The next local assembly picks up `okf/main`.
 
 **Failure modes:**
 
-- **The GitHub API is down or rate-limited.** The writer jobs exit non-zero and the next run retries. Every action is safe to repeat.
-- **Writer runs overlap.** One concurrency group queues runs and never cancels one.
+- **The GitHub API is down or rate-limited.** `compass stamp` or `compass sync` exits non-zero. Every action is safe to repeat, so the person runs it again.
+- **Two people run the writers at once.** Merges pass the head SHA they checked, and stamps push only as fast-forwards, so the later write fails and the next run sees the result. [INFERENCE] A comment can be posted twice if both runs read before either writes.
+- **Nobody runs the writers.** Knowledge pull requests stay open after their code merges, and covered concepts go without `process:` stamps. Pilot metric 5 measures the first.
 - **A sync action meets a conflict or failing checks.** The job comments once and retries on the next run.
 - **The stamper's push races a merge.** The fast-forward fails and the repo is skipped. The next run stamps only if the check passed on the new head.
 - **The check never runs on the default-branch head.** Nothing is stamped, and each run logs `no check run on head`.
 - **A `checks.txt` concept id is missing, or a `verified` form is unsupported.** The stamper fails, names the row or concept, and rewrites nothing.
-- **A repo can't be fetched, or its bundle is empty.** The hub run fails and names the repo.
-- **The Go build fails inside an action.** The job fails before any check runs.
+- **A repo can't be fetched, or its bundle is empty.** Assembly names the repo. In local mode an unfetchable repo keeps its previous copy (Interfaces).
+- **The Go build fails inside the bundle-check action.** The job fails before any check runs.
 - **The hub is unreadable during setup.** Setup exits non-zero, names the repo, and writes nothing.
 - **Upstream okfcli ships a different fix.** We write datetimes only, so our data survives either behavior.
 
 **Trust boundaries:**
 
-- **The writer key** can push to every pilot repo. It is usable only from the hub's default branch, through the `okf-write` environment. The hub template documents what that requires:
-  - a ruleset that blocks direct pushes and requires a code-owner approval;
-  - CODEOWNERS on `.github/`, `CODEOWNERS`, `repos.txt` and `checks.txt`.
-- **The reader key** can be read by anyone with write access to the hub, because pull request CI runs before review. To limit that:
-  - the app is installed only on listed repos;
-  - it can only read contents;
-  - its tokens are short-lived;
-  - assembly accepts only `$OKF_ORG` URLs.
-- **Pinned tools.**
-  - Compass actions are pinned by commit SHA, and third-party actions by SHA.
-  - The `okf` binary is pinned by sha256.
-  - Tokens reach `compass` only as action inputs or through the variable named by `--token-env`, and are never written to disk.
+- **No stored credentials.** No app keys exist. `compass` takes a token only through the variable named by `--token-env`, or uses the caller's git credentials. It never writes a token to disk, and it can do only what its caller can.
+- **The hub's control files.** `repos.txt` decides what gets assembled and `checks.txt` decides what gets stamped. So CODEOWNERS covers them and `CODEOWNERS` itself, and the hub template documents a ruleset that requires a code-owner approval. That review is enforced only where rulesets are available (Risks: GitHub Free).
+- **Assembly accepts only `https://github.com/<owner>/<repo>` URLs.** Any owner is allowed (decision 7). A `repos.txt` change passes code-owner review before developers' machines fetch it, and what it fetches is copied as untrusted text, never run.
+- **Pinned tools.** The compass action is pinned by commit SHA, third-party actions by SHA, and the `okf` binary by sha256.
 - **Merges by the sync job.** The sync job merges only when every condition holds:
   - the head is `okf/<b>` in the same repo, never a fork;
   - a human with write access approved the current head;
@@ -215,10 +217,10 @@ Decided in planning:
   - the code pull request from `<b>` merged into the default branch;
   - the two pull requests link each other in at least one direction.
 
-  It merges with a merge commit, passing the head SHA it checked.
-- **The check job's evidence** is only a job from the named workflow file, triggered by a push to the default branch.
+  It merges with a merge commit, as the person who runs it, passing the head SHA it checked.
+- **The stamper's evidence** is only a job from the named workflow file, triggered by a push to the default branch.
 - **Repo bundles are untrusted text.** The skill tells agents to treat concepts as claims, never instructions.
-- **`human:` stamps** stay checked by review alone (design section 8).
+- **`human:` stamps** stay checked by review alone (design section 8). `process:` stamps carry decision 13's accepted cost.
 
 ## Phases
 
@@ -227,24 +229,24 @@ Decided in planning:
 | 01 | M1 | [phase-01-cli-core.md](phase-01-cli-core.md) | `compass` builds from a clone and replaces every script except the writer jobs; the moved suites pass against it | completed |
 | 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | completed |
 | 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | in-progress |
-| 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Compass code is pushed; a scratch hub made from the template and the scratch repos run green on compass actions | pending |
-| 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools` and `tuan-nng/knowledge-hub` are deleted, and the docs describe compass and the end-user hub | pending |
-| 06 | M3 | [phase-06-org-and-check-job.md](phase-06-org-and-check-job.md) | Compass and the fork move to the company org; the writer app stamps live | pending |
-| 07 | M3 | [phase-07-sync-live.md](phase-07-sync-live.md) | The sync job carries out every state-table row against a scratch branch-mode repo | pending |
+| 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | pending |
+| 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools` and `tuan-nng/knowledge-hub` are deleted, and the docs describe compass, the end-user hub and local-first operation | pending |
+| 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` stamps a scratch repo and names a protection refusal; `compass sync` carries out every state-table row except the merge on a scratch branch-mode repo | pending |
+| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and the scratch repos stay green on its action | pending |
 | 08 | M4 | [phase-08-folder-pilot.md](phase-08-folder-pilot.md) | 1–2 folder-mode repos are live, and `compass pilot report` measures them | pending |
 | 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | One branch-mode repo is live, and CI and cloud agents find its knowledge | pending |
-| 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics and a roll-out decision is committed to compass | pending |
+| 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics and a roll-out decision is committed to the stats repo | pending |
 
 Dependencies:
 
 - 02 needs the module and shared packages from 01, so 01 and 02 overlap once those land.
 - 03 needs 01.
-- 04 needs 01–03.
+- 04 needs 01–03. Phase 03's one open item, the manual Cursor run, doesn't block it; that run uses the skill as phase 04 leaves it.
 - 05 needs 04.
-- 06 needs 05 and the company org.
-- 07 needs 06.
-- 08 needs 06 and the pilot repos.
-- 09 needs 07 and 08.
+- 06 needs 04.
+- 07 needs 05.
+- 08 needs 06, 07, the pilot repos and the stats repo.
+- 09 needs 08.
 - 10 needs 09 and the pilot windows.
 
 Scope: ten phases. Each closes one milestone step with its own exit check. M1 rewrites about 2,600 lines (824 of shell and Python entry points, 1,113 of Python library, 573 of validator) in one module, and splitting it further would hide which half works.
@@ -253,25 +255,26 @@ Scope: ten phases. Each closes one milestone step with its own exit check. M1 re
 
 - Changing what any check, the stamper or the sync job decides while porting to Go. Phases 01–02 move behavior; they don't change it.
 - Creating a hub in `setup`, or hosting a hub for end users (decision 3).
+- How compass reaches a developer machine (decision 3).
 - Release binaries for `compass` (decision 16).
 - Enforcing who writes a `human:` stamp.
 - Removing a `process:` stamp when its check later fails; `stale_after` still ages the concept.
 - okfcli#35: the skill reads no custom frontmatter keys.
 - Tooling that moves concepts (design section 4.7).
 - Git for Windows support for branch setup and hooks.
-- Any dependency on OpenKB or an LLM-calling tool in the skill's commands, the actions or the hub jobs (decision 10).
+- Any dependency on OpenKB or an LLM-calling tool in the skill's commands, the action or the writer commands (decision 10).
 - An MCP server or any agent interface other than the CLI and the skill.
 - Rolling out beyond the pilot repos.
 
 ## Acceptance Criteria
 
-1. A fresh compass clone builds `compass` with `make install`, with Go, make and git as the only prerequisites. `compass setup` against a readable hub leaves a working `okf`, the skill in each detected agent folder, and a config. Against an unreadable hub it writes nothing.
+1. A fresh compass clone builds `compass` with `make install`, with Go, make and git as the only prerequisites. `compass setup` against a readable hub leaves a working `okf`, the skill in each detected agent folder, a clone of the hub (an existing clone is reused), and a config. Against an unreadable hub it writes nothing.
 2. Every case in the moved suites passes against `compass`, and both recorded-API test sets pass in Go.
-3. A hub made only by copying `templates/hub/` and running `compass app create` assembles on GitHub. It fails on a broken cross-repo link, an empty bundle and a symlink.
+3. A hub made only by copying `templates/hub/` assembles on a developer machine with `compass hub assemble`. Assembly fails on an empty bundle and a symlink, and `compass hub check` fails on a broken cross-repo link.
 4. `tuan-nng/okf-tools` and `tuan-nng/knowledge-hub` no longer exist, and nothing live refers to them.
 5. In a folder-mode pilot repo, an agent with the skill reads with trust rules and records 1–3 knowledge files in a code pull request. The bundle check passes, and a reviewer's `verified` line makes `okf show` report `human-reviewed`.
 6. The stamper stamps only concepts in `checks.txt`, only after the named check passed, and makes no commit when stamps are current.
-7. In a branch-mode repo, the `okf/main` workflow checks knowledge pull requests, and the sync job carries out each state-table row.
+7. In a branch-mode repo, the `okf/main` workflow checks knowledge pull requests, and `compass sync`, run by a person, carries out each state-table row.
 8. The read-out reports all five metrics for at least one repo per mode, over at least four weeks, and states a roll-out decision.
 
 ## Verification
@@ -280,24 +283,25 @@ Run from the compass root:
 
 - `go vet ./... && go test ./...` exits 0.
 - `./test/run-all.sh` exits 0.
-- `gh run list -R <hub> -w hub -L 1 --json conclusion -q '.[0].conclusion'` prints `success`, for the scratch hub in M2 and the pilot hub after.
+- In a clone of the hub, `compass hub assemble --ci . && compass hub check .` exits 0, for the scratch hub in M2 and the pilot hub after.
 - `gh repo view tuan-nng/okf-tools` and `gh repo view tuan-nng/knowledge-hub` both exit non-zero.
-- `compass pilot report --repos pilot.txt --since <start>` prints a value for each of the five metrics, for at least one repo in each mode.
+- `compass pilot report --repos pilot.txt --since <start>` prints a value for each of the five metrics, for at least one repo in each mode, and writes the same report into the stats clone.
 - `af plans` reports zero findings.
 
 ## Risks
 
 - **The rewrite drops a behavior.** Signal: a moved end-to-end case fails, or a live run differs from its recorded result. Response: fix in place. The old scripts stay readable in the local `okf-tools` clone until phase 05.
 - **The validator port disagrees with okf-skills.** Signal: the differential test reports a difference. Response: fix the port. If the YAML parsing differences can't be closed, return to planning on decision 19.
-- **Building Go in every CI job is slow.** Signal: the build step goes over 60 s. Response: rely on `setup-go`'s cache. If that isn't enough, return to planning on decision 16.
+- **Building Go in the bundle-check job is slow.** Signal: the build step goes over 60 s. Response: rely on `setup-go`'s cache. If that isn't enough, return to planning on decision 16.
 - **Pushing compass exposes local-only files.** The harness folders and `CLAUDE.local.md` are ignored only through this clone's `.git/info/exclude`. Signal: before a push, `git ls-files` lists harness folders or `CLAUDE.local.md`. Response: stop and ask the user.
+- **Publishing compass exposes something private.** Phase 07 makes the whole history public. Signal: a secret-scan finding, or a private repo or person named in history. Response: stop and ask the user. Publishing then needs a history rewrite or a fresh repo.
 - **The account can't delete repos.** The `gh` token lacks `delete_repo`. Signal: HTTP 403. Response: the user runs `gh auth refresh -s delete_repo`, or deletes the repos in the GitHub UI.
-- **GitHub Free blocks hub protections on private repos.** Rulesets return HTTP 403, and private-repo environments need a paid plan. So the CODEOWNERS-review check and the `okf-write` environment refusal can't be shown until the company org exists. Signal: phase 06 starts before the org exists. Response: phase 06 waits for the org, as the user chose.
-- **The company org grant arrives late.** Signal: phase 06 can't move a repo or install an app. Response: M1–M2 stay usable under the personal account, and M3 waits.
+- **The pilot account refuses rulesets on private repos.** GitHub Free returns HTTP 403 "Upgrade to GitHub Pro" (checked on `tuan-nng`). Without rulesets, neither the hub's code-owner review nor the `okf/main` ruleset is enforced. Signal: the pilot repos' account is on Free and the repos are private. Response: the folder pilot goes ahead and the read-out names the gap. The branch pilot waits for an account that allows rulesets.
 - **Upstream disagrees with the fork.** Signal: okfcli/okf#39 is rejected, or a release parses datetimes differently. Response: keep the fork pinned. Return to planning only if upstream rejects datetimes outright.
 - **Skills don't auto-load.** Signal: an agent in phase 03 skips the skill despite the pointer line. Response: make the pointer line the main trigger. Return to planning if Cursor can't load user-level skills.
-- **The ruleset bypass is refused.** Signal: a pilot maintainer declines it. Response: that repo gets no `process:` stamps during the pilot, and the read-out says so.
-- **Assembly is slower through GitHub than locally.** Signal: the hub workflow takes over 10 minutes. Response: use shallow partial clones or parallel fetches.
+- **The stamp runner has no bypass on a protected default branch.** Signal: `compass stamp` reports a protection refusal on a pilot repo (decision 13). Response: that repo gets no `process:` stamps until its maintainers grant the bypass, and the read-out says so.
+- **Nobody runs the writers.** Signal: pilot metric 5 shows knowledge pull requests still open a day after their code merged, or covered concepts lack `process:` stamps a week after their check passed. Response: name one daily owner in the pilot hub. If that fails, return to planning on decision 13.
+- **Local assembly is slow over GitHub.** Signal: a cold `compass hub assemble` of the pilot hub takes over 5 minutes. Response: use shallow partial clones or parallel fetches.
 - **The check never runs where the stamper looks.** Signal: a `checks.txt` row logs `no check run on head` for a week. Response: change that repo's triggers with its maintainers, or remove the row.
 - **CI and cloud agents miss branch-mode knowledge.** Signal: phase 03's fresh-clone scenario, or a phase 09 agent run, never runs branch setup. Response: return to planning for how branch-mode repos announce themselves.
 
@@ -305,8 +309,8 @@ Run from the compass root:
 
 Inputs with fixed deadlines:
 
-1. **The company org name, and who approves app installs.** Needed before phase 06.
-2. **The pilot repos, with their maintainers' agreement.** Needed before phase 08.
+1. **The pilot repos, with their maintainers' agreement.** Needed before phase 08.
+2. **The stats repo.** Any repo the pilot team can share. Needed before phase 08.
 
 ## Validation Log
 
@@ -325,3 +329,44 @@ Inputs with fixed deadlines:
 - Failed: phase 07 omits state-table row 1, "conflicting", and the "Merged" condition (research:347-353); fixed in phase 07
 - Failed: folder workflow pushes only `main` (`okf-tools/templates/folder-workflow.yml:10-11`); weak ready-for-review check; `gh run watch` without `--exit-status`; fixed in phases 04, 06, 08
 - Decided: strict validator (decision 19) — port to Go with a differential test
+
+### Session 2 — 2026-10-06 (re-plan)
+**Trigger:** the user chose local-first operation with one CI gate, the repo bundle check, over the plan's hub CI and writer workflow. **Changed:** decisions 3, 7, 12 and 13–16; Design; acceptance criteria 3 and 7; Risks; phases 04–09. Phase 04 takes over the removal of hub CI, the apps and the writer workflow. Phase 05 takes over the decision-15 doc rows from the old phase 04. The old phases 06 (org and check job) and 07 (sync live) become phase 06 (writers run locally, personal account) and phase 07 (org move).
+**Checked on 2026-10-06:**
+- `actions/` doesn't exist yet.
+- `internal/app` has one caller, `cmd/compass/main.go`.
+- `templates/hub/.github/workflows/` holds `hub.yml` and `writer.yml`.
+- `okf.yml` is on `main` of the three folder-mode scratch repos and on `okf/main` of the two branch-mode ones.
+- `tuan-nng/okf-scratch-hub` doesn't exist.
+- The compass Actions access level is `none`.
+- The design doc and research report have 15 lines naming hub CI, the apps, `okf-write` or a nightly run (13 and 2).
+
+### Session 3 — 2026-10-06 (user decisions)
+**Trigger:** the user answered the open questions. **Decided:**
+- The stamper pushes directly and names a protection refusal (decision 13).
+- The sync merge row is proven at the branch pilot, where a second human can approve, not on the scratch repo.
+- There is no org setting, and `repos.txt` may list any GitHub repo (decision 7).
+- Setup clones the hub, asking for a folder that defaults to `~/src/<repo>`, and hub work happens there (decision 3).
+- Knowledge stays in the code repos (design unchanged).
+- A stats repo holds the report built from GitHub history, and the read-out (decision 20).
+- Compass goes public before the pilot, and the bundle-check action stays (decision 21).
+
+**Chosen without asking:** the sync job keeps its rule that the bundle check passed in CI on the knowledge PR head. The user's "sync runs the check itself" answered a no-CI premise that the user then withdrew. The old phase 07 (org move) becomes "publish compass".
+
+**Checked on 2026-10-06:**
+- `config.Org` has 5 callers, one each in `internal/hub`, `internal/okfinstall`, `internal/setup`, `internal/stamp` and `internal/syncjob`.
+- `config.ParseRepos` takes the org and has 2 callers, in `internal/stamp` and `internal/syncjob`.
+- 16 files name `OKF_ORG` or `--org`: 7 in `internal`, 5 in `templates` (2 of them are hub workflows that phase 04 deletes) and 4 in `test`. `assets.go` and `config.env` also carry it.
+- `tuan-nng/okf` is public.
+- No secret scanner is installed here.
+
+### Session 4 — 2026-10-06
+**Trigger:** `/af:plan validate` after the session 2–3 re-plan, with phase files edited but not committed. **Claims checked:** 41, by direct `git`, `gh`, `go` and `grep` runs; landed work re-checked with `go vet ./... && go test ./...` and `./test/setup.sh` (26 passes)
+**Verified:** 36 | **Failed:** 5 | **Unverified:** 0
+- Failed: phase 04 owns "the first push of compass code" — `origin/master` already equals local `4633439`, with `cmd/compass/main.go` on GitHub; fixed in phase 04
+- Failed: phase 05's doc grep "matched 16 lines" — 14 after `9e74c4f`; fixed in phase 05
+- Failed: phase 05's decision-13–16 grep misses "Runs in the hub on a schedule" (design:78), "The job runs on a schedule" (research:344) and the check-job lines (design:79,134); pattern widened to 32 lines and "check job" renamed to "the stamper"; fixed in phase 05
+- Failed: phase 04's template grep misses `compass hub check --help` "as hub CI does" (`internal/hub/check.go:19`), the skill's "the check job" (`skill/okf/SKILL.md:160`) and the `<org>` wording (`templates/hub/repos.txt:4`); widened to `internal cmd`, 29 lines; and hub defaults now name `stamp` and `sync` as Design does; fixed in phase 04
+- Failed: phase 06 stamps `okf-scratch-bundle-check`, which phase 04's scratch hub doesn't list (phase-04:19; `templates/hub/checks.txt:5`), and `compass sync` has no repo filter; fixed in phase 06 (hub row, one-repo temp hub, 422 status shared with "moved" at `internal/stamp/stamp.go:329-335`)
+- Decided: phase 04 starts while phase 03 waits on the manual Cursor run — Dependencies
+- Re-verified unchanged: caller counts (`config.Org` 5, `ParseRepos` 2, 16 `OKF_ORG`/`--org` files), `internal/app`'s one caller, no `actions/`, both hub workflows, five scratch `okf.yml` placements and the `bundle-check` job id, no `okf-scratch-hub`, Actions access `none`, `tuan-nng/okf` public, local `okf-tools` at `9dcdd60`, state-table rows (research:348-356), design section 9 item 5, phase 10's grep target (design:597), `actionlint templates/*.yml` exits 0, `af plans` 0 findings.

@@ -43,7 +43,7 @@ Owns:
 - the stamper, sync and front-matter packages;
 - the recorded fixtures moved from `okf-tools` (`test/stamp/fixtures/` and `test/sync/fixtures/`).
 
-The writer workflow template moves with `templates/` in phase 01 and into `templates/hub/` in phase 03. Phase 04 rewrites `actions/writer` to build `compass`.
+The writer workflow template moved with `templates/` in phase 01 and into `templates/hub/` in phase 03. Since the 2026-10-06 re-plan (plan decisions 13–16), phase 04 removes that workflow, and no `actions/writer` is built: people run `compass stamp` and `compass sync` themselves.
 
 ## Verification
 

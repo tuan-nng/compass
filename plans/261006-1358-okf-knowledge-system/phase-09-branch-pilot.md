@@ -4,20 +4,20 @@ title: "Branch-mode pilot"
 status: pending
 priority: P2
 effort: 1.5d + pilot window
-dependencies: [7, 8]
+dependencies: [8]
 ---
 
 # Phase 9: Branch-mode pilot
 
 ## Overview
 
-Outcome: one real branch-mode repo, named by its maintainers when phase 08 picks the pilot repos, follows the full loop in design section 4.9. The agents that CI and cloud platforms run on it also find its knowledge (plan decision 9). Its pilot window starts.
+Outcome: one real branch-mode repo, named by its maintainers when phase 08 picks the pilot repos, follows the full loop in design section 4.9. The agents that CI and cloud platforms run on it also find its knowledge (plan decision 9). Its first knowledge pull request proves the sync job's merge row live, the one row phase 06 could not cover. Its pilot window starts.
 
 Owns:
 
 - **Onboarding the repo,** following design section 4.8's branch-mode steps:
   - `okf/main`, created with `compass branch setup --init`;
-  - an `okf/main` ruleset that allows changes only through pull requests and only merge commits. It dismisses stale approvals and lets the writer app bypass;
+  - an `okf/main` ruleset that allows changes only through pull requests and only merge commits. It dismisses stale approvals and lets the hub owner who runs `compass stamp` bypass it (plan decision 13);
   - the `okf/main` workflow from `templates/`;
   - a `repos.txt` row with mode `branch`;
   - a `checks.txt` row where a check exists;
@@ -28,8 +28,11 @@ Owns:
 ## Verification
 
 - `git ls-remote origin refs/heads/okf/main` in the pilot repo prints one line.
-- `gh api repos/<org>/<repo>/rules/branches/okf/main` lists a `pull_request` rule that allows only `merge` and dismisses stale reviews on push.
-- On the first knowledge pull request after its code merged, `gh pr view <n> --json mergedBy -q .mergedBy.login` prints the writer app's bot login.
-- Where a `checks.txt` row exists, the next writer run adds a `process:` entry on `okf/main`, committed by the writer bot.
+- `gh api repos/<owner>/<repo>/rules/branches/okf/main` lists a `pull_request` rule that allows only `merge` and dismisses stale reviews on push.
+- On the first approved, green knowledge pull request after its code merged:
+  - the writer owner's first `compass sync` run after the code pull request's `mergedAt` merges it (plan decision 12);
+  - `gh pr view <n> --json mergedBy -q .mergedBy.login` prints the writer owner's login;
+  - its merge commit has 2 parents.
+- Where a `checks.txt` row exists, the writer owner's next `compass stamp` run adds a `process:` entry on `okf/main`.
 - Three CI or cloud agent runs, on three different tasks, each show branch setup's `okf/ -> okf/main` line in their log, and each cite a concept from `okf/`.
 - `compass pilot report --repos pilot.txt --since <start>` prints a number, not `n/a`, for this repo's branch-mode metric.
