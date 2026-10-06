@@ -23,7 +23,7 @@ Owns:
   - a `checks.txt` row where a push-triggered check exists;
   - the writer app's ruleset bypass, if the maintainers accept it.
 - **The pilot guide,** the compass README. It covers clone, `make install`, `compass setup`, and making a hub from the template.
-- **`compass pilot report`.** It reports the five metrics from design section 9, item 6, per repo, from GitHub pull requests and git history:
+- **`compass pilot report`.** It reports the five metrics from design section 9, item 5, per repo, from GitHub pull requests and git history:
   - **Agents writing knowledge:** merged pull requests that change a concept with a `generated` stamp, out of all merged pull requests.
   - **Reviewers correcting knowledge:** pull requests where someone other than the author changed a concept, beyond adding `verified`.
   - **Stale concepts hit:** commits that change a concept whose previous `stale_after` had passed.

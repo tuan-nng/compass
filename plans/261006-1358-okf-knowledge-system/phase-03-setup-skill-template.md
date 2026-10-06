@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "compass setup, the skill and the hub template"
-status: pending
+status: in-progress
 priority: P1
 effort: 3d
 dependencies: [1]
@@ -78,3 +78,21 @@ Owns:
 - One manual Cursor run of the read scenario is recorded, with its output.
 - `grep -nE 'until okfcli#34|once okfcli#34|okfcli#34 (is )?fixed|because of okfcli#34|stands in for .validate.|compares? .stale_after. with today|compares the date itself|wrong: the date has passed|fork before rollout' docs/design/okf-knowledge-system-ux.md docs/research/okf-knowledge-system.md` exits 1. On 2026-10-06 it matched 17 lines.
 - `grep -rn 'okf-branch-setup.sh\|assemble-hub.sh\|okf-tools\|knowledge-hub' skill templates` exits 1.
+
+## Result (2026-10-06)
+
+Everything is built and every automated check above passes. The phase stays open for one item: the manual Cursor run of the read scenario. It needs a person at Cursor; this machine has the Cursor app but no Cursor CLI.
+
+- `./test/setup.sh` passes 26 checks against a local bare hub. They cover the four cases above, plus a bad org, a bad agent and a hub that is not OWNER/REPO.
+- `compass validate templates/hub` and actionlint both exit 0.
+- Skill evals:
+  - claude: read, write, cross-repo and injected text each pass 3 of 3;
+  - omp: the same four scenarios, each 3 of 3;
+  - autoload: `loaded: yes`; the pointer line was not needed;
+  - fresh-branch-clone: `loaded: yes` and `setup-ran: yes` in all 3 runs.
+- Both greps above exit 1.
+- A live `compass setup` against `tuan-nng/knowledge-hub` installed the pinned okf, the config and the skill. A second run reported each of them current.
+  - **Key fact:** the hub check runs `git ls-remote` over https. A machine whose git uses ssh needs `gh auth setup-git`, or another https credential, first. The error message says so.
+- After review, setup downloads and checksums okf on every run, as the old installer did. It rewrites the binary only when the bytes differ. It no longer trusts an installed okf whose version matches, which would have kept an unchecked `--okf-bin` copy forever.
+- After review, a skill folder that is a symlink is replaced with a real folder; before, setup failed on it.
+- Design section 9 item 1 and research report section 8 item 1 are removed and the lists renumbered. The plan's references now point to design section 9 item 5 (pilot metrics) and research report section 8 item 2 (the `okf/main` check).

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Stamper and sync job in Go"
-status: pending
+status: completed
 priority: P1
 effort: 2d
 dependencies: [1]
@@ -49,3 +49,16 @@ The writer workflow template moves with `templates/` in phase 01 and into `templ
 
 - `go test ./...` exits 0. It covers every case above, including all 27 stamper tests (21 recorded-API, 6 front-matter) and 25 sync tests in the Python suites at `9dcdd60`.
 - `compass stamp --help` and `compass sync --help` list `--hub`, `--dry-run`, `--token-env` and `--api-url`. `sync` also lists `--ignore-login` and `--now`.
+
+## Result (2026-10-06)
+
+Done; nothing is committed yet. All 27 stamper tests and 25 sync tests pass as Go tests on the moved fixtures. `compass stamp --help` and `compass sync --help` list the flags above.
+
+An independent review of the port against the Python jobs found one blocker and three smaller differences. All are fixed, and each fix has a test that fails without it:
+
+- **Blocker — the stamper accepted any actor.** The port dropped the check that a `checks.txt` actor is `process:<name>`. A row with `human:alice` would have made the writer app commit a `human:` stamp, which only review may grant, and a quoted actor could inject text into the `verified` entry. The check is back. `TestChecksRowActorMustBeProcess` shows both rows exit 2 with no API writes.
+- **Sync read `#010` as PR 8.** Go's `fmt.Sscan` reads a leading zero as octal. It also missed non-ASCII digits that Python's `\d` matches. `links` now reads digits as Python's `int()` does; `TestLinksReadsReferencesAsPythonDoes` uses values taken from the Python function.
+- **Sync treated `"head_sha": null` as a match.** Python only matches a missing key. Fixed; GitHub never sends null here, so no live decision changed.
+- **Sync had its own, narrower time parser** for `--now` and commit dates. It now uses the stamper's `frontmatter.ParseTime`, which matches Python's `parse_time`.
+
+Usage lines now start `compass stamp` and `compass sync`.

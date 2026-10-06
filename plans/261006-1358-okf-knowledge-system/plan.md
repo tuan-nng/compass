@@ -1,7 +1,7 @@
 ---
 title: "OKF knowledge system: compass CLI, hub template and pilot"
 description: "People clone compass, build one compass binary, connect it to their own knowledge hub, and pilot the OKF knowledge system on real repos, folder mode first, then branch mode."
-status: pending
+status: in-progress
 priority: P1
 effort: 17d build + 4-week pilot per mode
 branch: master
@@ -46,7 +46,7 @@ All of this was verified on 2026-10-06. Code paths refer to `okf-tools`, which p
 - **Branch-mode setup and `okf/main` CI.**
   - `okf-branch-setup.sh` is hardened and passes 25 automated cases, with hook snippets for husky and lefthook.
   - The `okf/main` workflow template is proven on `tuan-nng/okf-scratch-branch-mode`: a clean PR passed, and a PR with a stale index failed.
-  - The design doc and research report section 5 record this as a tested fact. Research report section 8, item 3 still lists it as a to-do; phase 05 removes it.
+  - The design doc and research report section 5 record this as a tested fact. Research report section 8, item 2 still lists it as a to-do; phase 05 removes it.
 - **Hub assembly, not yet live.**
   - Built: the assembly script, the hub check, the hub action and workflow template, and the GitHub App helper.
   - `test/assemble.sh` passes. `bench-assemble.sh 50` runs in 5.0 s cold and 5.0 s warm.
@@ -151,7 +151,7 @@ Decided in planning:
   It pushes only as a fast-forward. In branch mode it stamps `okf/main`.
 - **`compass sync`.** Carries out the branch-mode state table (research report section 5) over every branch-mode repo, with dry-run. It merges only under the conditions in Trust boundaries.
 - **`compass setup`.** Prompts for the org and hub, or takes `--org`, `--hub` and `--yes`. If the hub isn't readable it writes nothing.
-- **`compass pilot report`.** Reports the five metrics from design section 9, item 6, per repo, for a date window.
+- **`compass pilot report`.** Reports the five metrics from design section 9, item 5, per repo, for a date window.
 
 **Data:**
 
@@ -224,9 +224,9 @@ Decided in planning:
 
 | # | Milestone | Phase | Outcome | Status |
 |---|---|---|---|---|
-| 01 | M1 | [phase-01-cli-core.md](phase-01-cli-core.md) | `compass` builds from a clone and replaces every script except the writer jobs; the moved suites pass against it | pending |
-| 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | pending |
-| 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | pending |
+| 01 | M1 | [phase-01-cli-core.md](phase-01-cli-core.md) | `compass` builds from a clone and replaces every script except the writer jobs; the moved suites pass against it | completed |
+| 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | completed |
+| 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | in-progress |
 | 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Compass code is pushed; a scratch hub made from the template and the scratch repos run green on compass actions | pending |
 | 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools` and `tuan-nng/knowledge-hub` are deleted, and the docs describe compass and the end-user hub | pending |
 | 06 | M3 | [phase-06-org-and-check-job.md](phase-06-org-and-check-job.md) | Compass and the fork move to the company org; the writer app stamps live | pending |

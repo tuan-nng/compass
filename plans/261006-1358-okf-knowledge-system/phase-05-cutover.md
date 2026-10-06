@@ -18,7 +18,7 @@ Owns:
 - **Deleting `tuan-nng/okf-tools` and its local clone** at `/mnt/data/works/okf-tools`. First confirm that the local clone's last commit is `9dcdd60` or later (GitHub stops at `fa42d76`), and that nothing in it, committed or not, was left unmoved.
 - **Deleting `tuan-nng/knowledge-hub` and its local clone** at `/mnt/data/works/knowledge-hub`.
 - **The design doc and research report.** Where they name `okf-tools`, a script, `okf_validate.py`, or `knowledge-hub` as a repo the project owns, they now name compass subcommands and "your hub". `knowledge-hub` may stay as an example name. Links into `evidence/` stay, since those files are dated records. The design doc's setup-script references point to `compass branch setup` and its git minimums: 2.28, or 2.42 for `--init`. Also:
-  - research report section 8, item 3 drops the `okf/main` workflow check, which is done;
+  - research report section 8, item 2 drops the `okf/main` workflow check, which is done;
   - the research report's OpenKB row cites plan decision 11 instead of the replaced rollout plan's decision 16.
 
 ## Verification
