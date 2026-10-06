@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "okfcli fork for datetime stale_after"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: [1]
@@ -32,7 +32,14 @@ Owns:
 - `go test ./...` in the fork exits 0.
 - On a copy of the `okf-tools` test data, where `billing-api/okf/gotchas/idempotency-key.md` has `stale_after: 2026-09-01T00:00:00Z`:
   - `okf validate <copy>/billing-api/okf` reports no error for `stale_after`, and reports the concept as stale;
-  - `okf show <copy>/billing-api/okf gotchas/idempotency-key | jq .stale` prints `true`;
+  - `okf show <copy>/billing-api/okf gotchas/idempotency-key | jq .concept.stale` prints `true`;
   - after changing it to a datetime one year ahead, the same command prints `false`.
 - `./test/bench-scale.sh` in `okf-tools`, with the pinned fork, prints medians under the plan's decision 9 targets: validate under 10 s, search under 2 s, backlinks under 2 s. Search returns exactly one hit.
 - `gh pr list -R okfcli/okf --author @me --state open` lists the upstream pull request.
+
+## Landed
+
+- Fork `tuan-nng/okf`: release `v0.5.0-tuan-nng.1` (tag on `09f79bb`, release run 37457982711 succeeded) with four tarballs and `checksums.txt`. The release branch drops upstream's Homebrew tap; the upstream PR branch carries only the patch.
+- Upstream pull request okfcli/okf#39 is open.
+- `okf-tools` `fa42d76` (tag `v0.2.0`) pins the release. `bin/okf-install` derives the release repo as `$OKF_ORG/okf`, so the org move only changes `config.env`.
+- Evidence on 2026-10-06, with the pinned binary: `okf validate` reports 0 `stale-after-invalid` and a WARN `okf/lifecycle/stale`; `jq .concept.stale` prints `true`, then `false` one year ahead. Upstream v0.5.0 prints `false` and reports 2 `stale-after-invalid`. `bench-scale.sh` medians: validate 0.340 s, search 0.311 s, backlinks 0.307 s, one hit. `test/run-all.sh` exits 0.
