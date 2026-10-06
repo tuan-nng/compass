@@ -328,11 +328,13 @@ Review and merge:
   as in folder mode.
 - Knowledge pull requests merge with a merge commit, never a squash, so git
   ancestry shows whether everything on `okf/<b>` has reached `okf/main`.
-- A workflow on `okf/main` (`.github/workflows/okf.yml`) runs the strict
-  validator and index check on knowledge pull requests. okfcli and the
-  okf-skills validator both ignore the `.github/` folder at the bundle root.
-  [INFERENCE: that GitHub runs a workflow stored only on `okf/main` for pull
-  requests into it was not tested.]
+- A workflow on `okf/main` (`.github/workflows/okf.yml`, from okf-tools
+  `templates/okf-main-workflow.yml`) runs the strict validator and index check
+  on knowledge pull requests. okfcli and the okf-skills validator both ignore
+  the `.github/` folder at the bundle root. GitHub runs a workflow stored only
+  on `okf/main` for pull requests into it: on a scratch private repo
+  (2026-10-06), a pull request from `okf/test` into `okf/main` passed the
+  `bundle-check` check, and one with an out-of-date index failed it.
 
 A sync job in the hub merges and cleans up on the remote. Local hooks cannot
 see branches deleted on GitHub, and a workflow triggered by a merge would

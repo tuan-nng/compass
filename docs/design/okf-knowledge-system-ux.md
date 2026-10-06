@@ -70,7 +70,7 @@ People and machines:
 | Coding agent | Claude Code, Cursor or omp, working in one repo with the skill loaded |
 | Developer | Works next to the agent and asks it questions |
 | Reviewer | Reviews pull requests. Is the only one who adds `verified: human:<login>` stamps. |
-| Repo CI | On every pull request, checks that the repo's bundle follows the format and that its index files are current. In branch mode this is a workflow stored on `okf/main` that runs on knowledge pull requests (not yet tried on GitHub, section 9). |
+| Repo CI | On every pull request, checks that the repo's bundle follows the format and that its index files are current. In branch mode this is a workflow stored on `okf/main` that runs on knowledge pull requests; GitHub runs it for pull requests into `okf/main` (tested on a scratch repo, 2026-10-06). |
 | Hub CI | Assembles every repo each night, or when a repo pipeline asks for it, and fails on broken cross-repo links |
 | Sync job | Branch mode only. Runs in the hub on a schedule. Once a code pull request merges, it merges the paired knowledge pull request if a human approved it and its checks pass. It deletes knowledge branches whose code branch is gone from the remote. |
 | Check job | A CI job that runs a machine check, such as a contract test against the OpenAPI file. After merge it commits a fresh `verified: process:<job>` entry on each concept it covers. It is the only writer of `process:` stamps. In branch mode it runs from the hub and commits to `okf/main`. |
@@ -653,10 +653,10 @@ report lists all but item 4.
    nothing in this design wrote it.
 5. For branch mode:
    - the sync job;
-   - a check on GitHub that a workflow stored only on `okf/main` runs for pull
-     requests into it;
-   - the setup script hardened from its sketch. It was tested only on scratch
-     repos;
+   - the setup script on real repos. The hardened script
+     (`okf-tools/bin/okf-branch-setup.sh`) passes every evidence case in
+     `okf-tools/test/branch-setup.sh`, but only on scratch repos, and the
+     `okf/main` workflow has run only on a scratch GitHub repo;
    - a way for CI and cloud agents to learn that a repo uses branch mode,
      likely organisation-level agent instructions.
 6. A pilot with 2–3 repos, at least one in each mode, measuring:
