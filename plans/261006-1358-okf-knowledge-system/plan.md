@@ -233,7 +233,7 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
 | 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | completed |
 | 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools`, `tuan-nng/knowledge-hub` and the six scratch repos are deleted, and the docs describe compass, the end-user hub and local-first operation | completed |
 | 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` names a refused push instead of "moved"; both writers pass on a hub folder copied from the template, with recorded GitHub responses | completed |
-| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and its action's code downloads without credentials | pending |
+| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and its action's code downloads without credentials | in-progress |
 | 08 | M4 | [phase-08-folder-pilot.md](phase-08-folder-pilot.md) | 1–2 folder-mode repos are live, and `compass pilot report` measures them | pending |
 | 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | One branch-mode repo is live, and CI and cloud agents find its knowledge | pending |
 | 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics and a roll-out decision is committed to the stats repo | pending |
