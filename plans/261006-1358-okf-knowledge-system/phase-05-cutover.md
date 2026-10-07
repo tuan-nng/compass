@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Delete okf-tools, knowledge-hub and the scratch repos"
-status: pending
+status: completed
 priority: P2
 effort: 0.5d
 dependencies: [4]
@@ -41,3 +41,37 @@ Owns:
 - `grep -n 'rollout plan decision' docs/research/okf-knowledge-system.md` exits 1.
 - `gh search code 'okf-tools' --owner tuan-nng` finds no workflow file.
 - `grep -niE "hub CI|writer app|reader app|okf-write|GitHub App|nightly|on a schedule|sync job in the hub|hub's sync job|check job" docs/design/okf-knowledge-system-ux.md docs/research/okf-knowledge-system.md` exits 1. On 2026-10-06 it matched 32 lines (24 and 8). The schedule and check-job terms catch lines the narrower pattern missed, such as design section 2's "Runs in the hub on a schedule" and research report section 5's "The job runs on a schedule".
+
+## Result (2026-10-07)
+
+Everything is done, and every check above passes. The user deleted the eight repos on GitHub, and the local clones were removed with the user's approval after the checks below.
+
+- **Nothing left unmoved.** The local `okf-tools` clone is at `9dcdd60`, with 9 uncommitted entries. Its 138 tracked and untracked files fall into three groups:
+  - 56 are identical in compass.
+  - 21 are in compass with edits made during phases 01–04 (the skill, the pointers, the eval harness, the workflows, the suites).
+  - 61 have no copy at the same path. The stamp and sync fixtures and the vendored validator are in compass with identical content. The rest were ported to Go (`bin/*`, `lib/okftools/*`, the Python tests), replaced (`bin/okf-tools-install` by `compass setup`, `test/install-tools.sh` by `test/setup.sh`), or dropped by decisions 7 and 14–16 (`config.env`, the hub and writer actions and workflows, `bin/okf-github-app`).
+  - The `knowledge-hub` clone and the five clones under `/mnt/data/works/scratch` have no uncommitted or unpushed work.
+- **Deleted on GitHub by the user:** `okf-tools`, `knowledge-hub` and all six `okf-scratch-*` repos, including `okf-scratch-hub`. The local clones `/mnt/data/works/okf-tools`, `/mnt/data/works/knowledge-hub` and `/mnt/data/works/scratch` are removed too. The `okf-tools` clone held the only copy of `783c201`..`9dcdd60`, all of which is in compass (above).
+- **Docs.** Both docs now name compass subcommands and "your hub". They describe local assembly with `compass hub check`, hub owners running `compass stamp` and `compass sync`, and the bundle check as the only CI job. They also make these changes:
+  - the hub CI row becomes a hub owner row;
+  - research report section 8, item 2 drops the done `okf/main` check;
+  - the OpenKB row cites plan decision 11;
+  - the symlink row describes the built count check;
+  - design section 4.4 and N4 cite the assembly bench, noting that its warm run re-cloned because of the `fetchBundle` cache bug;
+  - the CI and cloud agent gap now describes decision 9's pointer line, tested only headless so far.
+  - Design section 9 keeps five items, so item 5 is still the pilot metrics.
+- **Review fixes.** An independent review found two major doc errors, both now fixed:
+  - The bench numbers first cited were the `okf-tools` script's 5.0 s / 5.0 s. Compass's own bench is 3.7 s cold and 4.0 s warm (phase 01).
+  - Research section 5 said a failed fetch fails local assembly. Locally, an unfetchable repo keeps its previous copy with a warning, and only `--ci` fails the run.
+
+  Minor fixes:
+  - The writers are described as "run live only as `--dry-run`", matching phase 04.
+  - Research section 8, item 1 now lists a live stamp.
+  - The Recommendation calls okf-skills the validator's source, not a CI action.
+  - "Scratch repos" becomes "local test repos" for `compass branch setup`.
+- Phase 10's check `grep -n 'sync job, which is not built' docs/design/okf-knowledge-system-ux.md` already exits 1, because the rewrite dropped that line.
+- **Checks.**
+  - The `okf-tools`/script grep, the `rollout plan decision` grep, and the hub CI/app/schedule/check-job grep all exit 1.
+  - `gh search code 'okf-tools' --owner tuan-nng` finds nothing.
+  - `gh repo view` exits 1 for `tuan-nng/okf-tools` and `tuan-nng/knowledge-hub`. `gh repo list` finds 0 `okf-scratch-*` repos, and the local clone `test -e` check exits 1.
+  - Outside `plans/` and `evidence/`, `knowledge-hub` remains only as an example name: in the docs, and as the local bare remote that `test/skill-eval.sh` builds. Phase 03 left no compass user config or `~/src/knowledge-hub` clone on this machine.

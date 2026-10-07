@@ -1,7 +1,9 @@
 # How the OKF knowledge system works: interactions and UX
 
 Date: 2026-09-29. Status: design. It builds on the
-[research report](../research/okf-knowledge-system.md). Nothing is installed yet.
+[research report](../research/okf-knowledge-system.md). The tooling it
+describes is built into compass as one binary, `compass`, and tested; the
+pilot on real repos has not started.
 
 ## Gist
 
@@ -16,19 +18,23 @@ request review, and CI. It runs as a loop:
    paired knowledge pull request (section 4.9).
 3. **Review.** A human checks that knowledge in the normal diff, or in the
    linked knowledge pull request in branch mode, and can mark it verified.
-4. **Assemble.** One script copies every repo's knowledge into a hub view, so
-   cross-repo questions can be answered. Agents run it before a cross-repo
-   question; hub CI runs it nightly to catch broken cross-repo links.
+4. **Assemble.** `compass hub assemble` copies every repo's knowledge into a
+   local view of your hub, so cross-repo questions can be answered, and
+   `compass hub check` reports broken cross-repo links. Agents run both before
+   a cross-repo question or a hub pull request; reviewers run them before
+   approving a hub pull request. The hub has no CI.
 
 The main UX risks:
 
 - Search results do not show trust or staleness, so the agent needs a second call.
-- The hub view is only as fresh as its last assembly, and each assembly
-  fetches every repo.
+- The hub view is only as fresh as its last local assembly, and each assembly
+  fetches every repo. Nothing reports a broken cross-repo link until someone
+  assembles.
 - Nothing stops an agent from writing a fake "human verified" stamp. Only review catches it.
-- Branch mode depends on two local git hooks and a sync job in the hub. An
-  agent without the hooks must pair `okf/` with its branch itself, and if the
-  sync job stops, knowledge pull requests stay open after their code merges.
+- Branch mode depends on two local git hooks and on a hub owner running
+  `compass sync`. An agent without the hooks must pair `okf/` with its branch
+  itself, and until someone runs `compass sync`, knowledge pull requests stay
+  open after their code merges.
   `git pull` does not update `okf/`, so the agent pulls it before reading.
 - Upstream okfcli rejects the datetime `stale_after` this design uses
   (okfcli#34). Compass pins a patched fork, `tuan-nng/okf` release
@@ -39,14 +45,16 @@ The main UX risks:
 
 Command output in this document is real. It comes from okfcli v0.5.0, or from
 the pinned fork `v0.5.0-tuan-nng.1` for `okf show` in section 4.1, run on
-the test data in the `okf-tools` repo: `testdata/fixture/`, rebuilt from the
-research protocol's planted facts, and, for hub queries, `testdata/proto/`, the
-same data with the report's conventions, assembled into a hub. `okf-tools`
-checks both sets with `test/check-fixture.sh`. Branch-mode output comes from
-scratch repos ([evidence](../research/okf-knowledge-system/evidence/branch-mode.md)). The
-skill, the fetching assembly script, the hub CI job, the sync job and the
-check job are proposals. The branch-mode setup script is a sketch. Section 9
-lists what does not exist yet.
+the test data in compass: `testdata/fixture/`, rebuilt from the research
+protocol's planted facts, and, for hub queries, `testdata/proto/`, the same
+data with the report's conventions, assembled into a hub.
+`test/check-fixture.sh` checks both sets. Branch-mode output comes from
+scratch repos ([evidence](../research/okf-knowledge-system/evidence/branch-mode.md)).
+The skill, `compass hub assemble`, `compass hub check`, `compass branch setup`,
+the stamper (`compass stamp`) and `compass sync` are built and tested. The
+stamper and `compass sync` have written nothing live yet: their tests use
+recorded GitHub responses, and their live runs so far were `--dry-run`.
+Section 9 lists what does not exist yet.
 
 ## 1. The original problem
 
@@ -73,10 +81,10 @@ People and machines:
 | Coding agent | Claude Code, Cursor or omp, working in one repo with the skill loaded |
 | Developer | Works next to the agent and asks it questions |
 | Reviewer | Reviews pull requests. Is the only one who adds `verified: human:<login>` stamps. |
-| Repo CI | On every pull request, checks that the repo's bundle follows the format and that its index files are current. In branch mode this is a workflow stored on `okf/main` that runs on knowledge pull requests; GitHub runs it for pull requests into `okf/main` (tested on a scratch repo, 2026-10-06). |
-| Hub CI | Assembles every repo each night, or when a repo pipeline asks for it, and fails on broken cross-repo links |
-| Sync job | Branch mode only. Runs in the hub on a schedule. Once a code pull request merges, it merges the paired knowledge pull request if a human approved it and its checks pass. It deletes knowledge branches whose code branch is gone from the remote. |
-| Check job | A CI job that runs a machine check, such as a contract test against the OpenAPI file. After merge it commits a fresh `verified: process:<job>` entry on each concept it covers. It is the only writer of `process:` stamps. In branch mode it runs from the hub and commits to `okf/main`. |
+| Repo CI | The only CI job. On every pull request, compass's `actions/bundle-check` builds `compass` and runs `compass bundle check`, which checks that the repo's bundle follows the format and that its index files are current. In branch mode this is a workflow stored on `okf/main` that runs on knowledge pull requests; GitHub runs it for pull requests into `okf/main` (tested on a scratch repo, 2026-10-06). |
+| Hub owner | A person who owns your hub. Runs `compass stamp` and `compass sync` on their own machine, with their own GitHub token, on demand; daily during the pilot. Needs a ruleset bypass on each protected repo, because the stamper pushes straight to the default branch or `okf/main`. |
+| `compass sync` | Branch mode only. Run by a hub owner. Once a code pull request merges, it merges the paired knowledge pull request if a human approved it and its checks pass. It deletes knowledge branches whose code branch is gone from the remote. |
+| The stamper (`compass stamp`) | Run by a hub owner. For each row of your hub's `checks.txt`, it asks the GitHub API whether a named CI job, such as a contract test against the OpenAPI file, passed on the head of the repo's default branch. If it did, it commits a fresh `verified: process:<actor>` entry on each concept the row covers. It is the only writer of `process:` stamps. In branch mode it commits to `okf/main`. When branch protection refuses its push, it says so and exits non-zero. |
 
 Each repo stores its bundle in one of two modes, chosen by its maintainers:
 
@@ -94,10 +102,10 @@ Artifacts:
 | Artifact | Where | Written by |
 |---|---|---|
 | Repo bundle | `<repo>/okf/`: one markdown file per concept | Agents and developers, in code pull requests (folder mode) or paired knowledge pull requests (branch mode) |
-| Hub repo | `knowledge-hub/`: cross-repo dependencies, shared decisions, glossary | Agents and developers, in hub pull requests |
-| Assembled hub view | `knowledge-hub/repos/<name>/`: copies of every repo bundle, ignored by git | Assembly script only, run locally or in hub CI |
-| Skill | One `SKILL.md` that every agent loads | The platform team |
-| Branch-mode setup | [okf-branch-setup.sh](../research/okf-knowledge-system/evidence/okf-branch-setup.sh): creates the `okf/` worktree and installs two hooks in `.git/hooks/`, which git never commits | The platform team; each developer runs it once per clone |
+| Your hub | A repo your team makes from compass's `templates/hub/`, such as `knowledge-hub/`: `repos.txt`, `checks.txt`, cross-repo dependencies, shared decisions, glossary. It holds no workflows and no credentials. | Agents and developers, in hub pull requests |
+| Assembled hub view | `<your hub>/repos/<name>/`: copies of every repo bundle, ignored by git | `compass hub assemble` only, run locally |
+| Skill | One `SKILL.md` that every agent loads; `compass setup` installs it | The platform team |
+| Branch-mode setup | `compass branch setup`: creates the `okf/` worktree and installs two hooks in `.git/hooks/`, which git never commits. Needs git 2.28 or newer, or 2.42 for `--init`. | The platform team; each developer runs it once per clone |
 
 ```mermaid
 flowchart LR
@@ -107,7 +115,7 @@ flowchart LR
   subgraph RepoB["web-app repo"]
     CB[code] --- KB[okf/ bundle]
   end
-  subgraph Hub["knowledge-hub repo"]
+  subgraph Hub["your hub repo"]
     X[cross-repo/ decisions/ glossary/]
     V["repos/ (assembled copies)"]
   end
@@ -125,13 +133,13 @@ flowchart LR
 
 | Actor | Uses | Never does |
 |---|---|---|
-| Coding agent | Six commands: `okf search`, `show`, `list`, `backlinks`, `index`, `validate`. Plain file edits. In branch mode, `git -C okf` to check the paired branch, pull, commit, and push. | Adds a `verified` stamp, `human:` or `process:`; edits `knowledge-hub/repos/`; links from one repo bundle into another repo's files; pushes to `okf/main` directly |
-| Developer | Reads the markdown on GitHub or in an editor. Asks the agent. Runs the assembly script locally for cross-repo work. In branch-mode repos, runs the setup script once per clone. | Needs to learn the CLI to benefit |
+| Coding agent | Six commands: `okf search`, `show`, `list`, `backlinks`, `index`, `validate`. Plain file edits. `compass hub assemble` and `compass hub check` for cross-repo work. In branch mode, `git -C okf` to check the paired branch, pull, commit, and push. | Adds a `verified` stamp, `human:` or `process:`; edits the hub's `repos/`; links from one repo bundle into another repo's files; pushes to `okf/main` directly |
+| Developer | Reads the markdown on GitHub or in an editor. Asks the agent. Runs `compass hub assemble` locally for cross-repo work. In branch-mode repos, runs `compass branch setup` once per clone. | Needs to learn the CLI to benefit |
 | Reviewer | The pull request diff, usually 1–3 knowledge files; in branch mode, the knowledge pull request linked from the code one. Adds one `verified` line in their own commit. | Approves a `verified: human:` line they did not write |
-| Repo CI | `okf_validate.py okf --strict` from okf-skills; then `okf index okf` and `test -z "$(git status --porcelain -- okf)"`, which fails if the committed index files are out of date. The branch-mode workflow runs the same checks on `.`, the bundle root. | Changes any files |
-| Hub CI | Assembly script, strict validator, broken-link report | Writes back into repos |
-| Sync job | The GitHub API for pull request states; merges approved knowledge pull requests with a merge commit; comments when one is missing, unapproved or failing; deletes `okf/<b>` branches | Merges a knowledge pull request before its code pull request merges, or without a human approval; opens knowledge pull requests itself; touches code branches or deletes `okf/main` |
-| Check job | Its machine check; one `verified` line per covered concept, in its own commit after merge | Stamps a concept its check does not cover |
+| Repo CI | `compass bundle check`: `compass validate`, the strict validator ported from okf-skills; then `okf index` on the bundle and a check that the committed index files did not change. The branch-mode workflow runs the same check on `.`, the bundle root. | Changes any files |
+| Hub owner | `compass stamp` and `compass sync`, with their own GitHub token | Runs them from CI; stores a write key |
+| `compass sync` | The GitHub API for pull request states; merges approved knowledge pull requests with a merge commit; comments when one is missing, unapproved or failing; deletes `okf/<b>` branches | Merges a knowledge pull request before its code pull request merges, or without a human approval; opens knowledge pull requests itself; touches code branches or deletes `okf/main` |
+| The stamper | The result of the named CI job; one `verified` line per covered concept, in its own commit | Stamps a concept its row in `checks.txt` does not list |
 
 **The UX choice: the interface is the file.** Tools that rewrite frontmatter
 made noisy diffs; one tag change became a 17-line diff (report, finding 6).
@@ -270,11 +278,11 @@ sequenceDiagram
 In branch mode the knowledge arrives in its own pull request, from `okf/<b>`
 into `okf/main`, linked from the code pull request. The reviewer reads both,
 adds any `verified` line on `okf/<b>`, and approves the knowledge pull request.
-Nobody merges it before the code. Once the code pull request merges, the sync
-job merges the knowledge pull request, but only if a human approved it and
-its checks pass (section 4.9). Unlike folder mode, knowledge nobody reviewed
-does not ride along with the code; it waits. The knowledge pull request is the
-proof of who added a `human:` stamp.
+Nobody merges it before the code. Once the code pull request merges, the next
+`compass sync` run by a hub owner merges the knowledge pull request, but only
+if a human approved it and its checks pass (section 4.9). Unlike folder mode,
+knowledge nobody reviewed does not ride along with the code; it waits. The
+knowledge pull request is the proof of who added a `human:` stamp.
 
 ### 4.4 An agent answers a cross-repo question
 
@@ -282,21 +290,26 @@ The task, in billing-api: "Change the response shape of POST /v2/invoices."
 The agent first asks who depends on that contract.
 
 1. A single repo cannot answer this, so the agent uses the assembled hub. The
-   developer has `knowledge-hub` checked out, and the agent refreshes its view:
+   developer has your hub cloned, here at `~/src/knowledge-hub` (`compass setup`
+   records the clone), and the agent refreshes its view:
 
    ```
-   $ assemble-hub.sh ~/src/knowledge-hub
+   $ compass hub assemble ~/src/knowledge-hub
    ```
 
-   The script reads `repos.txt` and fetches only the bundle of each listed
+   It reads `repos.txt` and fetches only the bundle of each listed
    repo from its git remote: the `okf/` folder of the default branch in folder
    mode, or the `okf/main` branch in branch mode. It copies each one into
    `repos/<name>/` and removes frontmatter from the copied `index.md` files.
-   Hub CI runs the same script. The developer needs read access to every
-   listed repo, but no local checkout of any of them. Copying 50 repos took
-   2.9 s in the research; fetching them was not measured. [INFERENCE: with
-   shallow sparse clones kept between runs, a refresh is one `git fetch` per
-   repo.]
+   No CI runs it; every developer and agent runs it locally. The developer
+   needs read access to every listed repo, but no local checkout of any of
+   them. It keeps a clone cache between runs. In a bench, it assembled 50
+   repos (10,100 files) from local bare remotes in 3.7 s cold and 4.0 s warm
+   (`test/bench-assemble.sh 50`). The warm number measured cold clones: a
+   known cache bug (`internal/hub/assemble.go` compares the `insteadOf`-
+   rewritten `git remote get-url origin` with the `repos.txt` URL) made the
+   warm run re-clone, and the fix is scheduled before the folder-mode pilot.
+   Fetch time from GitHub itself is not measured until the pilot.
 2. It asks for backlinks, meaning every concept that links to this one:
 
    ```
@@ -330,13 +343,15 @@ shared-auth's session endpoint.
 2. The agent opens a separate hub pull request as a draft. It adds
    `cross-repo/web-app-session-dependency.md` with type `Cross-Repo Dependency`,
    linking `/repos/web-app/…` and `/repos/shared-auth/…`.
-3. Hub CI assembles the repos and runs the validator with `--strict`, which
-   fails on any broken link. Until the web-app knowledge reaches the bundle
-   the hub assembles, a link to a concept it adds is broken, so the hub pull
-   request stays red. In folder mode that happens when the web-app pull
-   request merges; in branch mode, when the sync job merges its knowledge pull
-   request. CI then re-runs green and the hub pull request is marked ready for
-   review.
+3. Before marking it ready, the agent runs `compass hub assemble` and then
+   `compass hub check`, which runs the strict validator and fails on any
+   broken link. Until the web-app knowledge reaches the bundle the hub
+   assembles, a link to a concept it adds is broken, so the check fails. In
+   folder mode that happens when the web-app pull request merges; in branch
+   mode, when `compass sync` merges its knowledge pull request. After that
+   change merges, the agent or developer runs both commands again; once they
+   pass, the hub pull request is marked ready for review. The reviewer runs
+   them again before approving.
 
 Cross-repo links live only in the hub, because the OKF spec has no way to link
 between bundles (report, finding 4). This rule keeps every repo bundle valid
@@ -372,8 +387,10 @@ Moves should be rare. They are a manual, human-led step:
    match what okfcli writes.
 3. After the repo's knowledge change merges (the code pull request in folder
    mode, the knowledge pull request in branch mode), the same person opens a
-   hub pull request fixing the links from step 1. Nightly hub CI fails on any
-   link that was missed, and the hub's CODEOWNERS get the failure.
+   hub pull request fixing the links from step 1. `compass hub assemble` and
+   `compass hub check`, run before that pull request is opened and again
+   before it is approved, fail on any link that was missed. Nothing reports a
+   missed link elsewhere until someone assembles.
 
 ### 4.8 Adding a repo
 
@@ -387,30 +404,33 @@ Folder mode:
 2. Run `okf index okf` and commit the result. The first run replaces the
    prose in the root `index.md` and adds an `index.md` to each folder. Doing
    it here keeps that one-time noise out of the first agent pull request.
-3. Add both repo CI checks to the repo's CI: the strict validator and the
-   index check (section 3).
+3. Add the bundle check to the repo's CI: copy compass's
+   `templates/folder-workflow.yml` into `.github/workflows/`. It runs
+   `actions/bundle-check` (section 3).
 4. Add one line to the repo's `AGENTS.md` (or `CLAUDE.md`): read
    `okf/index.md` and follow the OKF skill before starting work.
-5. Add `<name> <git URL> folder` to `knowledge-hub/repos.txt`.
+5. Add `<name> <GitHub URL> folder` to your hub's `repos.txt`.
 
 Branch mode:
 
 1. Agree with the maintainers on the `okf/…` branches, and on write access
-   for the hub's sync job and check job.
-2. In a clone, run `okf-branch-setup.sh --init`. It creates the orphan branch
-   `okf/main` with a root `index.md` and checks it out at `okf/`. Add
-   `overview.md`, run `okf index okf`, commit inside `okf/`, and publish with
-   `git -C okf push -u origin okf/main`.
-3. Protect `okf/main` so changes arrive only through pull requests, with the
-   sync job and check job allowed to merge and commit. Add
-   `.github/workflows/okf.yml` on `okf/main`, running the same checks as repo
+   for the hub owners who run `compass sync` and `compass stamp`.
+2. In a clone, run `compass branch setup --init` (git 2.42 or newer). It
+   creates the orphan branch `okf/main` with a root `index.md` and checks it
+   out at `okf/`. Add `overview.md`, run `okf index okf`, commit inside
+   `okf/`, and publish with `git -C okf push -u origin okf/main`.
+3. Protect `okf/main` so changes arrive only through pull requests, with a
+   bypass for the hub owners, whose `compass sync` merges and `compass stamp`
+   commits. Add compass's `templates/okf-main-workflow.yml` as
+   `.github/workflows/okf.yml` on `okf/main`; it runs the same check as repo
    CI on `.` (section 3). The validators and `okf index` ignore `.github/`.
 4. The repo's `AGENTS.md` cannot carry the pointer line, because it lives on
    the code branches. Put it in each developer's user-level agent
    instructions: in a repo whose remote has an `okf/main` branch, run
-   `okf-branch-setup.sh` if `okf/` is missing, then follow the OKF skill.
-5. Add `<name> <git URL> branch` to `knowledge-hub/repos.txt`.
-6. Every developer runs `okf-branch-setup.sh` once in each clone.
+   `compass branch setup` if `okf/` is missing, then follow the OKF skill.
+5. Add `<name> <GitHub URL> branch` to your hub's `repos.txt`.
+6. Every developer runs `compass branch setup` once in each clone. It needs
+   git 2.28 or newer.
 
 Either way, agents then fill in knowledge as they work. The okf-skills
 `backfill` command can draft concepts from git history as `status: draft`,
@@ -418,15 +438,16 @@ but it was not tested.
 
 ### 4.9 Working in a branch-mode repo
 
-The report's section 5 ("Branch mode") defines the branches, hooks and sync
-job rules. This is how they feel in use. Output is from the scratch-repo test
+The report's section 5 ("Branch mode") defines the branches, hooks and
+`compass sync` rules. This is how they feel in use. Output is from the
+scratch-repo test
 ([evidence](../research/okf-knowledge-system/evidence/branch-mode.md)).
 
-1. Once per clone, the developer runs the setup script. `okf/` is now a
+1. Once per clone, the developer runs `compass branch setup`. `okf/` is now a
    worktree of `okf/main`:
 
    ```
-   $ okf-branch-setup.sh
+   $ compass branch setup
    okf/ -> okf/main
    ```
 
@@ -441,11 +462,11 @@ job rules. This is how they feel in use. Output is from the scratch-repo test
 
 3. Before reading, the agent checks that `okf/` exists and is paired:
    `git -C okf branch --show-current`. The hooks do not run in CI, in cloud
-   agents, or in repos whose hook manager (`core.hooksPath`) made the setup
-   script refuse. A fresh clone there has no `okf/` at all, so the agent runs
-   the setup script first. Otherwise it switches `okf/` itself, creating the
-   branch from `origin/okf/feat/retry` if a teammate pushed it, else from
-   `origin/okf/main`.
+   agents, or in repos whose hook manager (`core.hooksPath`) made
+   `compass branch setup` refuse. A fresh clone there has no `okf/` at all, so
+   the agent runs `compass branch setup` first. Otherwise it switches `okf/`
+   itself, creating the branch from `origin/okf/feat/retry` if a teammate
+   pushed it, else from `origin/okf/main`.
 
    Then it updates `okf/`. `git pull` on the code branch does not touch it,
    so without this an agent on `main` reads `okf/main` as this clone last
@@ -469,7 +490,7 @@ job rules. This is how they feel in use. Output is from the scratch-repo test
    $ git push -q -u origin feat/retry && git -C okf push -q -u origin okf/feat/retry
    ```
 
-   It pushes the code branch first. The sync job treats a knowledge branch
+   It pushes the code branch first. `compass sync` treats a knowledge branch
    with no code branch on the remote as abandoned, after a 7-day wait.
 5. A teammate who checks out `feat/retry` gets its knowledge too. The hook
    tracks the pushed branch:
@@ -484,9 +505,9 @@ job rules. This is how they feel in use. Output is from the scratch-repo test
    ```
 
 6. The reviewer reviews both pull requests (section 4.3). When the code pull
-   request merges, the sync job merges the approved knowledge pull request.
-   When GitHub deletes `feat/retry`, the next sync run deletes
-   `okf/feat/retry`. The report's section 5 has the full rules.
+   request merges, the next `compass sync` run merges the approved knowledge
+   pull request. When GitHub deletes `feat/retry`, the next `compass sync` run
+   deletes `okf/feat/retry`. The report's section 5 has the full rules.
 7. When the developer deletes the local branch, the hook deletes its local
    knowledge branch if nothing would be lost. It never touches the remote.
 
@@ -506,7 +527,7 @@ sequenceDiagram
   participant A as Agent
   participant C as Code PR
   participant K as Knowledge PR
-  participant S as Sync job (hub)
+  participant S as compass sync (hub owner)
   A->>C: push feat/retry
   A->>K: push okf/feat/retry, open PR, link it from C
   Note over C,K: reviewer reviews both, adds verified on okf/feat/retry, approves K
@@ -525,7 +546,7 @@ Four more things to know:
   `git branch -m okf/feat/old okf/feat/new`, then the code branch. `okf/`
   follows both renames.
 - The hub and other repos see only `okf/main`. Knowledge on `okf/feat/retry`
-  is visible only on that branch until the sync job merges it.
+  is visible only on that branch until `compass sync` merges it.
 - `git gc` reports every branch it packs as deleted. The hook ignores those
   reports, so `okf/` stays paired and no knowledge branch is lost.
 
@@ -534,7 +555,7 @@ Four more things to know:
 The spec defines `status` as one of `draft`, `stable` or `deprecated`. Trust
 is separate: tools derive a `trust_tier` from the `verified` entries. The tiers
 are `unverified`, `machine-confirmed` (a `process:` verifier, written by the
-check job) and `human-reviewed`. In the diagram, `Stable_verified` covers both
+stamper) and `human-reviewed`. In the diagram, `Stable_verified` covers both
 verified tiers.
 
 ```mermaid
@@ -542,7 +563,7 @@ stateDiagram-v2
   [*] --> Draft: agent writes, cannot confirm
   [*] --> Stable_unverified: agent writes, confirmed against code
   Draft --> Stable_unverified: confirmed later
-  Stable_unverified --> Stable_verified: reviewer or check job adds stamp
+  Stable_unverified --> Stable_verified: reviewer or stamper adds stamp
   Stable_verified --> Stale: stale_after passes
   Stable_unverified --> Stale: stale_after passes
   Stale --> Stable_unverified: agent re-checks, new generated and stale_after, verified removed
@@ -562,7 +583,7 @@ rules:
 
 - Whenever an agent writes a new `generated` stamp, it removes the concept's
   `verified` entries and says so in the pull request. The reviewer can then
-  verify again, and the check job re-confirms after merge. Agents may remove a
+  verify again, and the stamper re-confirms after merge. Agents may remove a
   stamp; they never add one, `human:` or `process:`.
 - When reading, the agent counts a `verified` entry only if its `at` is at or
   after `generated.at`. This catches edits that skipped the first rule.
@@ -594,56 +615,61 @@ Two rules for backlinks:
 | Need | Mechanism | Evidence | What remains |
 |---|---|---|---|
 | N1: agents start informed | Skill step "before starting work", plus a pointer line in `AGENTS.md` (in branch mode, in user-level agent instructions); search, then list or show; trust rules in section 6 | Search 0.37 s and backlinks 0.34 s at 10,000 concepts; correct hits on the test data | Search hits lack trust and status, so the agent needs a second call; plain substring matching with no ranking |
-| N2: agents update knowledge in normal work | Plain file edits in the same pull request, or in a paired knowledge pull request in branch mode, then `okf index` and `okf validate` | 1–3 file diffs; unknown frontmatter keys kept on disk; in branch mode, `okf/` followed every branch checkout on scratch repos | `okf index` overwrites hand-written `index.md` prose, so prose goes in `overview.md`; branch mode needs the sync job, which is not built |
+| N2: agents update knowledge in normal work | Plain file edits in the same pull request, or in a paired knowledge pull request in branch mode, then `okf index` and `okf validate` | 1–3 file diffs; unknown frontmatter keys kept on disk; in branch mode, `okf/` followed every branch checkout on scratch repos | `okf index` overwrites hand-written `index.md` prose, so prose goes in `overview.md`; branch mode needs a hub owner to run `compass sync`, which has merged nothing live yet (tested on recorded GitHub responses, run live only as `--dry-run`) |
 | N3: cheap human checks | Knowledge sits in the code diff, or in a knowledge pull request linked from it; one-line `verified` stamp; stamps removed when the claim changes; CI validation | A one-line verify diff; strict validator clean on the prototype | Nothing enforces who writes a `human:` stamp. Review is the only check; a later check could match the stamp's login against the pull request's approving reviewers (section 4.3). In branch mode the reviewer must open a second pull request, and knowledge waits until someone approves it. |
-| N4: cross-repo knowledge | Hub `Cross-Repo Dependency` concepts plus an assembled view of all repos, fetched from their remotes | 3 correct backlinks on the prototype hub, including the cross-repo edge; 50-repo copy in 2.9 s | The view is only as fresh as its last assembly; fetch time for 50 repos was not measured |
+| N4: cross-repo knowledge | Hub `Cross-Repo Dependency` concepts plus a local assembled view of all repos, fetched from their remotes by `compass hub assemble` and checked by `compass hub check` | 3 correct backlinks on the prototype hub, including the cross-repo edge; `test/bench-assemble.sh 50` assembled 50 repos (10,100 files) from local bare remotes in 3.7 s cold and 4.0 s warm. The warm run re-cloned because of a known cache bug (`insteadOf` rewrites in the cache's origin check), so it measured cold clones; the fix is scheduled before the folder-mode pilot. | The view is only as fresh as its last local assembly; fetch time from GitHub for 50 repos is unmeasured until the pilot |
 | N5: current and portable | `stale_after`, `deprecated`, and agents fixing contradictions as they go; plain OKF files; skill depends on six commands | Every tool read the same files; a CLI swap only touches the skill | Staleness detection relies on the pinned fork until upstream okfcli fixes okfcli#34 |
 
 ## 8. What users see when something breaks
 
 | Failure | What the user or agent sees | Handling |
 |---|---|---|
-| Hub built with symlinks instead of copies | Validation passes but loads 0 repo concepts: a false pass | The assembly script only copies. Hub CI should fail when the concept count drops sharply [INFERENCE: not built]. |
-| Repo bundle uses a `/…` link | Passes in the repo, reported broken in the hub | Hub CI reports it. The skill forbids `/…` links in repo bundles. The re-run test data shows exactly this finding for `idempotency-key`. |
+| Hub built with symlinks instead of copies | Validation passes but loads 0 repo concepts: a false pass | `compass hub assemble` only copies, and fails, naming the repo, when a bundle holds a symlink. `compass hub check` checks that each repo's concept count is above zero and matches the files copied. |
+| Repo bundle uses a `/…` link | Passes in the repo, reported broken in the hub | `compass hub check` reports it. The skill forbids `/…` links in repo bundles. The re-run test data shows exactly this finding for `idempotency-key`. |
 | `stale_after` in the spec's datetime form, with upstream okfcli (okfcli#34) | `okf validate` errors; `okf show` says `stale: false` for a stale concept | Compass pins a patched fork, `v0.5.0-tuan-nng.1`, and `compass setup` installs it. The fork accepts datetimes and reports `stale: true`. |
 | Agent writes `verified: human:…` itself | Concept shows as `human-reviewed` | Caught only in review. The skill forbids it. |
 | Agent changes a reviewed concept but keeps its `verified` entry | Tools still show `human-reviewed` | The skill ignores a stamp older than `generated.at` (section 5). The reviewer sees the kept stamp in the diff. |
-| Hub pull request links a concept that is not merged yet | Hub CI fails on the broken link | Open the hub pull request as a draft and mark it ready after the repo pull request merges (section 4.5) |
+| Hub pull request links a concept that is not merged yet | `compass hub check`, run locally, fails on the broken link | Open the hub pull request as a draft. After the repo change merges, run `compass hub assemble` and `compass hub check` again, and mark it ready once they pass (section 4.5) |
 | Search term inside backticks, such as `` `Idempotency-Key` `` | okfcli finds it; okf-mcp did not | Re-test any replacement search tool against this case |
-| Moved file breaks links from the hub | Nightly hub CI fails; the hub's CODEOWNERS are notified | Section 4.7 |
+| Moved file breaks links from the hub | `compass hub check` fails at the next local assembly; nothing reports it before then | Section 4.7 |
 | Two pull requests change the same folder | Merge conflict in a generated `index.md` or in `log.md` | Take either side of `index.md` and re-run `okf index okf`; keep both `log.md` entries (section 4.2) |
 | Pull request adds or edits a concept without re-running `okf index` | Repo CI fails the index check | Run `okf index okf` and commit |
-| Branch mode: hooks missing (CI, cloud agent, or a hook manager set `core.hooksPath`) | A fresh clone has no `okf/`; an older one keeps `okf/` on the knowledge branch of an earlier code branch, and knowledge commits land there | The skill runs the setup script if `okf/` is missing and checks the pairing before reading or writing (section 4.9). For hook managers, add the two hooks to the manager by hand. |
+| Branch mode: hooks missing (CI, cloud agent, or a hook manager set `core.hooksPath`) | A fresh clone has no `okf/`; an older one keeps `okf/` on the knowledge branch of an earlier code branch, and knowledge commits land there | The skill runs `compass branch setup` if `okf/` is missing and checks the pairing before reading or writing (section 4.9). For hook managers, add the two hooks to the manager by hand (`compass branch setup --no-hooks`, then `--print-hook`). |
 | Branch mode: knowledge merged since the last pull | `okf/` lacks it; `git -C okf status --short --branch` shows `behind` | The skill pulls `okf/` before reading whenever it tracks a remote branch (section 4.9) |
-| Branch mode: CI or cloud agent does not know the repo uses branch mode | The agent works without the repo's knowledge | Open gap: such agents lack the developers' user-level instructions. Organisation-level agent instructions are the likely fix (section 9). |
-| Branch mode: code pull request merged, but its knowledge pull request is unapproved, failing or conflicting | The knowledge pull request stays open; the sync job comments on both pull requests | Approve it, or resolve as in section 4.2 (`okf index okf` for `index.md` conflicts); the next sync run merges it |
+| Branch mode: CI or cloud agent does not know the repo uses branch mode | The agent works without the repo's knowledge | Each CI and cloud agent environment runs `compass setup`, and the platform's organisation-level agent instructions carry the pointer line from `templates/user-pointer.md`: if `git ls-remote origin okf/main` prints a line, run `compass branch setup` and follow the skill. Tested only in a headless scenario so far (section 9). |
+| Branch mode: code pull request merged, but its knowledge pull request is unapproved, failing or conflicting | The knowledge pull request stays open; `compass sync` comments on both pull requests | Approve it, or resolve as in section 4.2 (`okf index okf` for `index.md` conflicts); the next `compass sync` run merges it |
 | Branch mode: code branch deleted locally while `okf/` holds uncommitted work on its knowledge branch | `Kept okf/feat/y: okf/ has uncommitted changes on it.` | Commit or discard the work, switch `okf/` to `okf/main`, then delete the knowledge branch by hand |
 | Branch mode: code branch deleted locally before its knowledge branch was pushed | `Kept okf/feat/x: it has commits that are not on the remote.` | Push it and open a knowledge pull request, or delete it by hand with `git branch -D okf/feat/x` |
 | Branch mode: code branch renamed with `git branch -m` | The hook treats it as a delete. A pushed knowledge branch is deleted locally and `okf/` moves to `okf/main`; the next checkout pairs with a new, empty `okf/<new>`. An unpushed one is kept, with the usual message. | Rename the knowledge branch first (section 4.9). After the fact: `git branch -m okf/<old> okf/<new>` if it was kept, or `git branch okf/<new> origin/okf/<old>` if it was pushed; then `git -C okf switch okf/<new>`. |
-| Branch mode: sync job stopped | Knowledge pull requests stay open after their code merges; `okf/<b>` branches pile up on the remote | The hub's CODEOWNERS own the job. Nothing alerts on this yet; the pilot measures it (section 9). |
+| Branch mode: nobody runs `compass sync` | Knowledge pull requests stay open after their code merges; `okf/<b>` branches pile up on the remote | The hub owners run it, daily during the pilot. Nothing alerts on this; the pilot measures it (section 9). |
 
 ## 9. What does not exist yet
 
 These are needed before the journeys above work end to end. Section 8 of the
-report lists all but item 3.
+report lists the same open work in shorter form.
 
-1. The skill: the section 6 outline in the report, plus sections 4.1–4.6,
-   4.9, 5 and 6 of this document written as agent instructions. If the skill
-   ever reads custom frontmatter keys, also okfcli#35: `okf show` drops them.
-2. The real assembly script, which fetches each bundle from the git remotes in
-   `repos.txt` (`okf/` or `okf/main`, by mode), and the hub CI job. The
-   current script is a 15-line prototype that reads from a local workspace
-   folder.
-3. The check job. The test data has one `process:ci-contract-test` stamp, but
-   nothing in this design wrote it.
+1. The skill in use. It is built (`skill/okf/SKILL.md` in compass, installed
+   by `compass setup`) from the section 6 outline in the report and sections
+   4.1–4.6, 4.9, 5 and 6 of this document, but no agent has used it on a real
+   repo. If the skill ever reads custom frontmatter keys, also okfcli#35:
+   `okf show` drops them.
+2. Assembly at real scale. `compass hub assemble` and `compass hub check` are
+   built and have assembled a hub made from `templates/hub/` from scratch
+   repos on GitHub. Fetch time from GitHub for 50 repos is unmeasured, and
+   the clone-cache fix (section 4.4) is still to land.
+3. A live stamp. The stamper (`compass stamp`) is built and tested on
+   recorded GitHub responses, and has run live only as `--dry-run`. The test
+   data has one `process:ci-contract-test` stamp, but no stamper run wrote it.
 4. For branch mode:
-   - the sync job;
-   - the setup script on real repos. The hardened script
-     (`okf-tools/bin/okf-branch-setup.sh`) passes every evidence case in
-     `okf-tools/test/branch-setup.sh`, but only on scratch repos, and the
+   - a live `compass sync` merge; it is built and tested on recorded GitHub
+     responses, and has run live only as `--dry-run`;
+   - `compass branch setup` on real repos. It passes every evidence case in
+     compass's `test/branch-setup.sh`, but only on local test repos, and the
      `okf/main` workflow has run only on a scratch GitHub repo;
-   - a way for CI and cloud agents to learn that a repo uses branch mode,
-     likely organisation-level agent instructions.
+   - CI and cloud agents finding branch-mode knowledge through the pointer
+     line (section 8). In a headless scenario on a fresh clone, the agent
+     loaded the skill and ran `compass branch setup` in 3 of 3 runs; no real
+     CI or cloud agent has run it yet.
 5. A pilot with 2–3 repos, at least one in each mode, measuring:
    - how often agents write knowledge;
    - how often reviewers correct it;
