@@ -21,8 +21,8 @@ Owns:
   - if the head is no longer the commit it read, it reports "moved", as now;
   - if the head is unchanged, nothing raced it. It reports that GitHub refused the push, quotes GitHub's message, names the likely cause (branch protection or a ruleset without a bypass for this account), and exits non-zero.
 
-  Rejected alternative: matching GitHub's message text. The text for a ruleset refusal is unknown without a live protected repo, and GitHub can change it. The head re-read works whatever the text says.
   Rejected alternative: matching GitHub's message text. The text for a ruleset refusal is unknown without a live protected repo, and GitHub can change it. The head re-read works whatever the text says. GitHub documents only 200, 409 and 422 for this endpoint ("Update a reference", REST API docs for Git references, API version 2022-11-28), so the re-read covers every documented refusal. Any other status still exits non-zero and names the repo, as now. If the re-read itself fails, the stamper exits non-zero and names the repo, like any other API error (plan Design, Failure modes).
+- **Writers on a template hub.** A Go test copies `templates/hub/` into a temporary folder, adds one `repos.txt` row and one `checks.txt` row under the shipped headers, and runs `compass stamp` and `compass sync` against it with recorded responses. This proves the shipped template's control files parse as the writers expect.
 
 ## Verification
 
