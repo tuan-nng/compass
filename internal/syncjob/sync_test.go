@@ -125,7 +125,10 @@ func (w *world) reset() {
 // --- running -------------------------------------------------------------
 
 func (w *world) runSyncAt(now string, extra ...string) int {
-	hub := ghfake.WriteHub(w.t, w.t.TempDir(), reposTxt, "")
+	return w.runSyncHub(ghfake.WriteHub(w.t, w.t.TempDir(), reposTxt, ""), now, extra...)
+}
+
+func (w *world) runSyncHub(hub, now string, extra ...string) int {
 	args := append([]string{"--hub", hub, "--api-url", ghfake.API, "--now", now}, extra...)
 	var out, errb bytes.Buffer
 	newClient := func(token, base string, dry bool) *github.Client {
@@ -264,6 +267,17 @@ func TestRow2MergedApprovedGreenKnowledgePrIsMerged(t *testing.T) {
 	}
 	w.expectLine("merged knowledge #42")
 	w.expectLine("approved by carol")
+}
+
+// The shipped hub template, with one branch-mode row under its headers,
+// parses as sync expects; checks.txt is copied too, though sync ignores it.
+func TestRow2OnTemplateHubMergesKnowledgePr(t *testing.T) {
+	w := newWorld(t)
+	hub := ghfake.TemplateHub(t, t.TempDir(), "web-app https://github.com/acme/web-app branch",
+		`web-app contract.yml "contract test" process:contract-test gotchas/idempotency-key`)
+	w.expectCode(0, w.runSyncHub(hub, defaultNow))
+	w.expectWrites(mp{"PUT", repoPath + "/pulls/42/merge"})
+	w.expectLine("merged knowledge #42")
 }
 
 func TestRow3UnapprovedCommentsOnBothPullRequests(t *testing.T) {

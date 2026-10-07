@@ -3,8 +3,8 @@
 //
 // Every request goes through Client.HTTP, which tests replace with a fake
 // http.RoundTripper. Any HTTP error, network error or rate limit returns an
-// *HTTPError; the caller logs it, names the repo, and exits non-zero so the
-// next scheduled run retries (plan Failure modes).
+// *HTTPError; the caller logs it, names the repo, and exits non-zero, and the
+// person who ran it runs it again (plan Failure modes).
 package github
 
 import (

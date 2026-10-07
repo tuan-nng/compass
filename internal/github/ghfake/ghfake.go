@@ -218,3 +218,45 @@ func WriteHub(t testing.TB, dir, repos, checks string) string {
 	}
 	return dir
 }
+
+// TemplateHub copies the shipped hub template (templates/hub/) into dir,
+// appends one row to its repos.txt and checks.txt under their headers, and
+// returns dir. The template itself is never written.
+func TemplateHub(t testing.TB, dir, reposRow, checksRow string) string {
+	t.Helper()
+	// Tests run in their package folder; the template sits under the module
+	// root, the nearest folder up that holds go.mod.
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
+			break
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			t.Fatal("no go.mod above the test's folder")
+		}
+		root = parent
+	}
+	src := filepath.Join(root, "templates", "hub")
+	err = os.CopyFS(dir, os.DirFS(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, row := range map[string]string{"repos.txt": reposRow, "checks.txt": checksRow} {
+		f, err := os.OpenFile(filepath.Join(dir, name), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.WriteString(row + "\n")
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}

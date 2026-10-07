@@ -196,7 +196,7 @@ type logLine struct {
 }
 
 // stampRepo stamps every row of one repo from one read. It returns ok=false
-// when a concept failed; err stops the repo.
+// when a concept failed or GitHub refused the push; err stops the repo.
 func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dryRun bool, log func(string)) (bool, error) {
 	ok := true
 	var info struct {
@@ -295,7 +295,7 @@ func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dr
 		}
 	}
 
-	suffix := ""
+	suffix, refusal := "", ""
 	if len(commits) > 0 && !dryRun {
 		parent := readSHA
 		var base struct {
@@ -329,13 +329,30 @@ func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dr
 			}
 			tree, parent = t.SHA, nc.SHA
 		}
+		var refused struct {
+			Message string `json:"message"`
+		}
 		status, err := gh.Patch(repo.API()+"/git/refs/heads/"+github.QuotePath(branch),
-			map[string]any{"sha": parent, "force": false}, nil, 409, 422)
+			map[string]any{"sha": parent, "force": false}, &refused, 409, 422)
 		if err != nil {
 			return false, err
 		}
 		if status == 409 || status == 422 {
-			suffix = fmt.Sprintf(" (not pushed: %s moved after %s; next run retries)", branch, short(readSHA))
+			// A race and a protection refusal share these statuses, and
+			// GitHub's message text is not a contract, so the head decides.
+			now, err := refSHA(gh, repo, branch)
+			if err != nil {
+				return false, err
+			}
+			if now != readSHA {
+				suffix = fmt.Sprintf(" (not pushed: %s moved after %s; next run retries)", branch, short(readSHA))
+			} else {
+				suffix = " (not pushed: refused)"
+				refusal = fmt.Sprintf("%s: error: %s: GitHub refused the update to %s at %s with HTTP %d %q;"+
+					" branch protection or a ruleset likely blocks this account, which needs a bypass",
+					Prog, repo.Name, branch, short(readSHA), status, refused.Message)
+				ok = false
+			}
 		} else {
 			suffix = fmt.Sprintf(" (commit %s)", short(parent))
 		}
@@ -352,6 +369,9 @@ func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dr
 		} else {
 			log(l.text)
 		}
+	}
+	if refusal != "" {
+		log(refusal)
 	}
 	return ok, nil
 }

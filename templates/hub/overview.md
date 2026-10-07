@@ -68,7 +68,8 @@ repeat; `--dry-run` reports what it would do without writing.
 - `compass stamp` commits `process:` stamps for the concepts `checks.txt`
   covers, once their check passed on the default branch head. It pushes
   straight to each repo's default branch (or `okf/main`), so a protected
-  branch needs a bypass for the person who runs it.
+  branch needs a bypass for the person who runs it. Without one, GitHub
+  refuses the push, and the stamper says so and exits non-zero.
 - `compass sync` merges approved, green branch-mode knowledge pull requests
   after their code pull request merges, and cleans up `okf/<b>` branches.
 

@@ -4,6 +4,7 @@ package stamp
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -377,36 +378,107 @@ func TestMissingConceptExitsNonzeroNamingChecksRow(t *testing.T) {
 // 11
 func TestBranchMovedAfterReadPushesNothing(t *testing.T) {
 	e := setup(t)
+	// The first read sees e.head; the re-read after the refusal sees a new head.
+	e.f.Add("GET", repoPath+"/git/ref/heads/main", ghfake.With(fx(t, "ref-main.json"),
+		obj{"object": obj{"sha": strings.Repeat("e", 40), "type": "commit"}}))
+	e.f.Add("GET", repoPath+"/git/ref/heads/main", fx(t, "ref-main.json"), ghfake.Times(1))
 	e.f.Add("PATCH", repoPath+"/git/refs/heads/main", fx(t, "ref-not-fast-forward.json"), ghfake.Status(422))
 	e.code(e.runStamp(row+" gotchas/idempotency-key\n"), 0)
 	e.committed() // one tree, one commit, one refused fast-forward; no retry, no force
 	e.logHas("not pushed: main moved")
 }
 
+// A refusal with the head unchanged is protection, not a race. The message is
+// synthetic: the stamper must not depend on GitHub's wording.
+func TestRefusedPushWithUnchangedHeadExitsNonzero(t *testing.T) {
+	for _, status := range []int{409, 422} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			e := setup(t)
+			e.f.Add("PATCH", repoPath+"/git/refs/heads/main", obj{"message": "refused for the test"}, ghfake.Status(status))
+			e.code(e.runStamp(row+" gotchas/idempotency-key\n"), 1)
+			e.committed() // one tree, one commit, one refused update; no retry, no force
+			e.logHas(fmt.Sprintf(`GitHub refused the update to main at %s with HTTP %d "refused for the test"`, e.head[:7], status))
+			e.logHas("branch protection or a ruleset likely blocks this account")
+			if strings.Contains(e.logText(), "moved") {
+				t.Errorf("refusal reported as a move:\n%s", e.logText())
+			}
+		})
+	}
+}
+
+func TestRefusedPushThenFailedReReadExitsNonzeroNamingRepo(t *testing.T) {
+	e := setup(t)
+	e.f.Add("GET", repoPath+"/git/ref/heads/main", fx(t, "rate-limited.json"),
+		ghfake.Status(403), ghfake.Header("x-ratelimit-remaining", "0"))
+	e.f.Add("GET", repoPath+"/git/ref/heads/main", fx(t, "ref-main.json"), ghfake.Times(1))
+	e.f.Add("PATCH", repoPath+"/git/refs/heads/main", fx(t, "ref-not-fast-forward.json"), ghfake.Status(422))
+	e.code(e.runStamp(row+" gotchas/idempotency-key\n"), 1)
+	e.committed()
+	e.logHas("stamp: error: billing-api:")
+}
+
 // Beyond the phase list
 
+// The "template" case runs on a copy of templates/hub/, proving the shipped
+// control files parse with their headers.
 func TestBranchModeChecksDefaultHeadAndStampsOkfMain(t *testing.T) {
-	e := setup(t)
+	const reposRow = "billing-api https://github.com/acme/billing-api branch"
+	checksRow := row + " gotchas/idempotency-key"
+	hubs := map[string]func(t *testing.T, dir string) string{
+		"bare": func(t *testing.T, dir string) string {
+			return ghfake.WriteHub(t, dir, reposRow+"\n", checksRow+"\n")
+		},
+		"template": func(t *testing.T, dir string) string {
+			return ghfake.TemplateHub(t, dir, reposRow, checksRow)
+		},
+	}
+	for name, makeHub := range hubs {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t)
+			okfMain := e.branchMode()
+			e.code(e.main("--hub", makeHub(t, e.dir), "--api-url", ghfake.API), 0)
+			w := e.f.Writes()
+			deepEq(t, methodPaths(w), [][2]string{
+				{"POST", repoPath + "/git/trees"}, {"POST", repoPath + "/git/commits"},
+				{"PATCH", repoPath + "/git/refs/heads/okf/main"}})
+			if len(w) != 3 {
+				t.FailNow()
+			}
+			deepEq(t, body(w[0])["tree"].([]any)[0].(obj)["path"], "gotchas/idempotency-key.md")
+			deepEq(t, body(w[1])["parents"], []any{okfMain})
+			if msg := body(w[1])["message"].(string); !strings.Contains(msg, "@ "+e.head[:7]+")") {
+				t.Errorf("message %q", msg)
+			}
+			e.logHas("stamped gotchas/idempotency-key (added) on okf/main")
+		})
+	}
+}
+
+// branchMode routes an okf/main head distinct from the default-branch head,
+// holding gotchas/idempotency-key, and returns that head.
+func (e *env) branchMode() string {
+	t := e.t
 	okfMain := strings.Repeat("c", 40)
 	e.f.Add("GET", repoPath+"/git/ref/heads/okf/main", ghfake.With(fx(t, "ref-main.json"),
 		obj{"ref": "refs/heads/okf/main", "object": obj{"sha": okfMain, "type": "commit"}}))
 	e.f.Add("GET", repoPath+"/git/commits/"+okfMain, ghfake.With(fx(t, "git-commit.json"), obj{"sha": okfMain}))
 	e.f.Add("PATCH", repoPath+"/git/refs/heads/okf/main", fx(t, "ref-updated.json"))
 	e.conceptAt("gotchas/idempotency-key", protoText(t, "gotchas/idempotency-key"), "", okfMain)
+	return okfMain
+}
+
+// In branch mode the re-read compares okf/main with the okf/main head it
+// read, not with the default-branch head.
+func TestBranchModeRefusedPushOnOkfMainExitsNonzero(t *testing.T) {
+	e := setup(t)
+	okfMain := e.branchMode()
+	e.f.Add("PATCH", repoPath+"/git/refs/heads/okf/main", obj{"message": "refused for the test"}, ghfake.Status(422))
 	hub := ghfake.WriteHub(t, e.dir, "billing-api https://github.com/acme/billing-api branch\n",
 		row+" gotchas/idempotency-key\n")
-	e.code(e.main("--hub", hub, "--api-url", ghfake.API), 0)
-	w := e.f.Writes()
-	deepEq(t, methodPaths(w), [][2]string{
-		{"POST", repoPath + "/git/trees"}, {"POST", repoPath + "/git/commits"},
-		{"PATCH", repoPath + "/git/refs/heads/okf/main"}})
-	if len(w) != 3 {
-		t.FailNow()
-	}
-	deepEq(t, body(w[0])["tree"].([]any)[0].(obj)["path"], "gotchas/idempotency-key.md")
-	deepEq(t, body(w[1])["parents"], []any{okfMain})
-	if msg := body(w[1])["message"].(string); !strings.Contains(msg, "@ "+e.head[:7]+")") {
-		t.Errorf("message %q", msg)
+	e.code(e.main("--hub", hub, "--api-url", ghfake.API), 1)
+	e.logHas(fmt.Sprintf(`stamp: error: billing-api: GitHub refused the update to okf/main at %s with HTTP 422`, okfMain[:7]))
+	if strings.Contains(e.logText(), "moved") {
+		t.Errorf("refusal reported as a move:\n%s", e.logText())
 	}
 }
 
