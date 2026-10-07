@@ -3,7 +3,7 @@ title: "OKF knowledge system: compass CLI, hub template and pilot"
 description: "People clone compass, build one compass binary, connect it to their own knowledge hub, and pilot the OKF knowledge system on real repos, folder mode first, then branch mode."
 status: in-progress
 priority: P1
-effort: 15.5d build + 4-week pilot per mode
+effort: 17.5d build + 4-week pilot per mode
 branch: master
 tags: [okf, knowledge, agents, tooling, go, cli]
 created: 2026-10-06
@@ -229,10 +229,10 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
 |---|---|---|---|---|
 | 01 | M1 | [phase-01-cli-core.md](phase-01-cli-core.md) | `compass` builds from a clone and replaces every script except the writer jobs; the moved suites pass against it | completed |
 | 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | completed |
-| 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | in-progress |
+| 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | completed |
 | 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | completed |
-| 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools`, `tuan-nng/knowledge-hub` and the six scratch repos are deleted, and the docs describe compass, the end-user hub and local-first operation | pending |
-| 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` names a refused push instead of "moved"; both writers pass on a hub folder copied from the template, with recorded GitHub responses | pending |
+| 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools`, `tuan-nng/knowledge-hub` and the six scratch repos are deleted, and the docs describe compass, the end-user hub and local-first operation | completed |
+| 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` names a refused push instead of "moved"; both writers pass on a hub folder copied from the template, with recorded GitHub responses | completed |
 | 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and its action's code downloads without credentials | pending |
 | 08 | M4 | [phase-08-folder-pilot.md](phase-08-folder-pilot.md) | 1–2 folder-mode repos are live, and `compass pilot report` measures them | pending |
 | 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | One branch-mode repo is live, and CI and cloud agents find its knowledge | pending |
@@ -242,11 +242,11 @@ Dependencies:
 
 - 02 needs the module and shared packages from 01, so 01 and 02 overlap once those land.
 - 03 needs 01.
-- 04 needs 01, 02 and phase 03's code. Phase 03's one open item, the manual Cursor run, doesn't block it; that run uses the skill as phase 04 leaves it. Phase 04's frontmatter therefore lists only 01 and 02, so it could close while 03 waits.
+- 04 needs 01, 02 and phase 03's code. Phase 03's last item, first planned as a manual Cursor run and done on 2026-10-07 as a Claude run, didn't block it; that run used the skill as phase 04 left it. Phase 04's frontmatter therefore lists only 01 and 02.
 - 05 needs 04.
 - 06 needs 04.
 - 07 needs 05.
-- 08 needs 06, 07, the pilot repos and the stats repo.
+- 08 needs 06, 07, the pilot repos, the stats repo, and the `fetchBundle` cache fix that phase 04's Result names, done through `/af:fix`. `internal/hub/assemble.go` compares `git remote get-url origin`, which applies `insteadOf` rewrites, with the `repos.txt` URL. So under any `insteadOf` rule, including the suites' `map_owner` (`test/lib.sh`), every run clones from scratch, and the warm assembly times in Landed and phase 01 measured cold clones. The fix's test shows a warm run reusing the cache under an `insteadOf` rule.
 - 09 needs 08.
 - 10 needs 09 and the pilot windows.
 
@@ -299,7 +299,7 @@ Run from the compass root:
 - **The account can't delete repos.** The `gh` token lacks `delete_repo`. Signal: HTTP 403. Response: the user runs `gh auth refresh -s delete_repo`, or deletes the repos in the GitHub UI.
 - **The pilot account refuses rulesets on private repos.** GitHub Free returns HTTP 403 "Upgrade to GitHub Pro" (checked on `tuan-nng`). Without rulesets, neither the hub's code-owner review nor the `okf/main` ruleset is enforced. Signal: the pilot repos' account is on Free and the repos are private. Response: the folder pilot goes ahead and the read-out names the gap. The branch pilot waits for an account that allows rulesets.
 - **Upstream disagrees with the fork.** Signal: okfcli/okf#39 is rejected, or a release parses datetimes differently. Response: keep the fork pinned. Return to planning only if upstream rejects datetimes outright.
-- **Skills don't auto-load.** Signal: an agent in phase 03 skips the skill despite the pointer line. Response: make the pointer line the main trigger. Return to planning if Cursor can't load user-level skills.
+- **Skills don't auto-load.** Signal: an agent in phase 03 skips the skill despite the pointer line. Response: make the pointer line the main trigger. Return to planning if Cursor can't load user-level skills. Cursor is untested, because the user has no Cursor access; its docs say it loads `~/.cursor/skills/` and `~/.claude/skills/` (phase 03 Result). The first pilot developer on Cursor is the first real check.
 - **The stamp runner has no bypass on a protected default branch.** Signal: `compass stamp` reports a protection refusal on a pilot repo (decision 13). Response: that repo gets no `process:` stamps until its maintainers grant the bypass, and the read-out says so.
 - **Nobody runs the writers.** Signal: pilot metric 5 shows knowledge pull requests still open a day after their code merged, or covered concepts lack `process:` stamps a week after their check passed. Response: name one daily owner in the pilot hub. If that fails, return to planning on decision 13.
 - **Local assembly is slow over GitHub.** Signal: a cold `compass hub assemble` of the pilot hub takes over 5 minutes. Response: use shallow partial clones or parallel fetches.
@@ -404,3 +404,21 @@ Inputs with fixed deadlines:
 - Without credentials, `curl -sfL` of compass's codeload tarball exits 22 (HTTP 404) and of `tuan-nng/okf`'s exits 0.
 
 **Decided by the user on 2026-10-07:** phase 05 deletes all six scratch repos and their local clones, together with `okf-tools` and `knowledge-hub`, after one `gh auth refresh -h github.com -s delete_repo`.
+
+### Session 8 — 2026-10-07
+**Trigger:** `/af:plan validate` after sessions 6–7 rewrote phases 05–09. **Claims checked:** 44, by direct `git`, `gh`, `go`, `curl` and `grep` runs, the built `compass` help, the pinned `okf`, and GitHub's REST docs; landed work re-checked with `go vet ./... && go test ./...` and `./test/run-all.sh` (7 suites pass)
+**Verified:** 39 | **Failed:** 5 | **Unverified:** 0
+- Failed: frontmatter effort 15.5d — the phase files sum to 17.5d; fixed in frontmatter
+- Failed: phase 06's template-hub test names no row mode — `compass sync` skips folder-mode repos (`internal/syncjob/sync.go:687`); fixed in phase 06 (one `branch` row)
+- Failed: phase 06 "the existing moved test still passes" — it registers one ref route returning the same head (`internal/stamp/stamp_test.go:378-384`), so the re-read would take the refusal path; fixed in phase 06 Verification (`ghfake` `Times` makes the sequence possible, `internal/github/ghfake/ghfake.go:68-69`)
+- Failed: phase 03's open Verification runs actionlint on `templates/hub/.github/workflows/*.yml`, which phase 04 deleted; fixed in phase 03
+- Failed: phase 04's `fetchBundle` finding had no owner — still present (`internal/hub/assemble.go:290-293`), and `test/bench-assemble.sh:18` maps URLs with `insteadOf`, as did `okf-tools/bin/assemble-hub.sh:90`; fixed in Dependencies
+- Decided: the `fetchBundle` fix runs as `/af:fix` before phase 08, not inside phase 06 — it is a proven bug outside the writers
+- Re-verified unchanged: all six scratch repos, `okf-tools` and `knowledge-hub` exist (private); the token lacks `delete_repo`; compass is private, `master`, Actions access `user`, codeload exits 22; `okf-tools` at `9dcdd60`; 22 stamper and 25 sync tests with Row1–Row7; the 409/422 "moved" path; `--api-url` on both writers; phase 05's grep counts (14, 24+8) and `research:472`; phase 09's `okf/ -> okf/main` line (`test/branch-setup.sh:142`); phase 10's grep target (design:597); "Update a reference" documents 200, 409, 422; `okf show` reports `trust_tier: human-reviewed`; no harness file tracked.
+
+### Session 9 — 2026-10-07 (phases 05 and 06 cooked)
+**Trigger:** `/af:cook`. **Result:**
+- Phase 06 is completed; the evidence is in its Result section.
+- Phase 05 is completed. The user deleted the eight repos on GitHub; the local clones were removed after the checks. Phase 05's Result has the details.
+- The docs now describe decision 9's pointer line in place of an open gap.
+- Phase 03 is completed. The user has no Cursor access, so the manual Cursor run became `./test/skill-eval.sh --agent claude --scenario read --runs 3` on the current skill, which passed 3 of 3. Cursor itself stays untested (Risks).

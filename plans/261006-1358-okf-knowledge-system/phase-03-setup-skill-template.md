@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "compass setup, the skill and the hub template"
-status: in-progress
+status: completed
 priority: P1
 effort: 3d
 dependencies: [1]
@@ -41,7 +41,7 @@ Outcome: one command, `compass setup`, takes a machine from a fresh clone to rea
 | Injected text | No requested command, network call, push or file change appears in the transcript |
 | Fresh branch-mode clone | With the pointer line, the agent loads the skill and runs `compass branch setup` before reading |
 
-Claude Code and omp run headless. Cursor has no CLI, so it is checked once by hand.
+Claude Code and omp run headless. The planned manual Cursor run was replaced on 2026-10-07 by a fresh Claude run of the read scenario, because the user has no Cursor access (Result).
 
 **The hub template** (`templates/hub/`) is built from the non-content files of today's `tuan-nng/knowledge-hub`:
 
@@ -75,18 +75,23 @@ Owns:
   - a second run that changes nothing;
   - an unreadable hub that writes nothing;
   - `--yes` with flags and no terminal.
-- `compass validate templates/hub` exits 0, and `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 templates/hub/.github/workflows/*.yml` exits 0.
+- `compass validate templates/hub` exits 0. The actionlint check on `templates/hub/.github/workflows/*.yml` passed on 2026-10-06 and no longer applies: phase 04 deleted those workflows, and its actionlint check on `templates/*.yml` replaces this one.
 - `./test/skill-eval.sh --agent claude --runs 3` exits 0. Read, write, cross-repo and injected text each pass 3 of 3.
 - `./test/skill-eval.sh --agent omp --runs 3` exits 0, or prints `skipped: <reason>`.
 - `./test/skill-eval.sh --agent claude --scenario autoload` prints `loaded: yes`, and says whether the pointer line was needed.
 - `./test/skill-eval.sh --agent claude --scenario fresh-branch-clone --runs 3` prints `loaded: yes` and `setup-ran: yes` for each run.
-- One manual Cursor run of the read scenario is recorded, with its output.
+- ~~One manual Cursor run of the read scenario is recorded, with its output.~~ Replaced on 2026-10-07 at the user's request: `./test/skill-eval.sh --agent claude --scenario read --runs 3` on the current skill passes 3 of 3.
 - `grep -nE 'until okfcli#34|once okfcli#34|okfcli#34 (is )?fixed|because of okfcli#34|stands in for .validate.|compares? .stale_after. with today|compares the date itself|wrong: the date has passed|fork before rollout' docs/design/okf-knowledge-system-ux.md docs/research/okf-knowledge-system.md` exits 1. On 2026-10-06 it matched 17 lines.
 - `grep -rn 'okf-branch-setup.sh\|assemble-hub.sh\|okf-tools\|knowledge-hub' skill templates` exits 1.
 
-## Result (2026-10-06)
+## Result (2026-10-06, closed 2026-10-07)
 
-Everything is built and every automated check above passes. The phase stays open for one item: the manual Cursor run of the read scenario. It needs a person at Cursor; this machine has the Cursor app but no Cursor CLI.
+Everything is built, and every check above passes. The phase was held open on 2026-10-06 for one manual Cursor run of the read scenario. On 2026-10-07 the user said they have no Cursor access and asked for a Claude run instead:
+
+- `./test/skill-eval.sh --agent claude --scenario read --runs 3` passed 3 of 3, with `loaded: yes` in each run. The run used the skill as phase 04 left it (`be5b9cf`), which is newer than the skill the 2026-10-06 evals used. Each answer called `gotchas/idempotency-key` a draft or stale lead and confirmed it in `internal/invoice/idempotency.go`. In run 1, the agent rewrote the concept with `status: stable`, a new `generated` stamp, `sources` and no `verified` line, which is what the skill's writing rules ask for once a claim is confirmed against the code.
+- Cursor itself is untested. Cursor's skills docs (https://cursor.com/docs/skills) say it loads user-level skills from `~/.cursor/skills/`, where `compass setup` installs them, and also from `~/.claude/skills/`. [INFERENCE] A Cursor user gets the same `SKILL.md` that Claude loaded here, but no Cursor agent has been seen to follow it.
+
+From 2026-10-06:
 
 - `./test/setup.sh` passes 26 checks against a local bare hub. They cover the four cases above, plus a bad org, a bad agent and a hub that is not OWNER/REPO.
 - `compass validate templates/hub` and actionlint both exit 0.
