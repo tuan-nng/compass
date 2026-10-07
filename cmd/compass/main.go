@@ -9,7 +9,6 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"compass/internal/app"
 	"compass/internal/branchsetup"
 	"compass/internal/bundlecheck"
 	"compass/internal/hub"
@@ -38,7 +37,6 @@ var commands = []command{
 	{"hub assemble", "fetch every repos.txt bundle into a hub's repos/", hub.AssembleMain},
 	{"hub check", "check an assembled hub", hub.CheckMain},
 	{"branch setup", "set up branch-mode okf/ in a clone", branchsetup.Main},
-	{"app create", "create the hub's reader or writer GitHub App", app.Main},
 	{"stamp", "write process: stamps from checks.txt", stamp.Main},
 	{"sync", "carry out the branch-mode knowledge pull request state table", syncjob.Main},
 	{"version", "print the build's commit", versionMain},

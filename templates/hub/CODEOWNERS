@@ -1,6 +1,6 @@
-# These files decide what runs with the writer key and what it touches.
+# These files decide which repos every developer's assembly fetches and which
+# concepts `compass stamp` stamps, so each change needs a code owner's review.
 # Replace @OKF_HUB_OWNERS with the people or team who approve changes to them.
-/.github/   @OKF_HUB_OWNERS
 /CODEOWNERS @OKF_HUB_OWNERS
 /repos.txt  @OKF_HUB_OWNERS
 /checks.txt @OKF_HUB_OWNERS

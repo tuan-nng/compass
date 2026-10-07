@@ -673,8 +673,8 @@ func (s *syncer) tryMerge(code, kpr *pull) (string, error) {
 
 // Run syncs every branch-mode repo in hub's repos.txt and returns the exit
 // code: 0 when every repo synced, 1 when any repo failed.
-func Run(hub string, gh *github.Client, org string, now time.Time, dryRun bool, ignore []string, log func(string)) (int, error) {
-	repos, err := config.ParseRepos(filepath.Join(hub, "repos.txt"), org)
+func Run(hub string, gh *github.Client, now time.Time, dryRun bool, ignore []string, log func(string)) (int, error) {
+	repos, err := config.ParseRepos(filepath.Join(hub, "repos.txt"))
 	if err != nil {
 		return 2, err
 	}

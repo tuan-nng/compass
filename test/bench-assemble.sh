@@ -12,10 +12,10 @@ n=${1:-50}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 git_isolated "$work/gitconfig"
-export OKF_ORG=benchorg OKF_HUB_CACHE="$work/cache"
+export OKF_HUB_CACHE="$work/cache"
 R="$work/remotes"
 mkdir -p "$R"
-map_org benchorg "$R"
+map_owner benchorg "$R"
 
 "$TOOLS_ROOT/test/gen-scale.sh" "$work/scale" "$n" >/dev/null
 H="$work/hub"

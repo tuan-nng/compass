@@ -2,8 +2,8 @@
 # .github/workflows/okf.yml; the code branches never carry it. The bundle root
 # is the branch root, so the check runs on ".".
 #
-# Before committing, replace OKF_ORG with the account that owns compass and
-# COMPASS_SHA with the full commit SHA of the compass version to use.
+# Before committing, replace COMPASS_REPO with the compass repo (owner/name)
+# and COMPASS_SHA with the full commit SHA of the compass version to use.
 name: okf
 
 on:
@@ -24,6 +24,6 @@ jobs:
           # The pull request head, not the merge commit GitHub would check out.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: OKF_ORG/compass/actions/bundle-check@COMPASS_SHA
+      - uses: COMPASS_REPO/actions/bundle-check@COMPASS_SHA
         with:
           bundle: .

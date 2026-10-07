@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,15 +26,18 @@ import (
 	"compass/internal/okfinstall"
 )
 
-const usageText = `usage: compass setup [--org ORG] [--hub OWNER/REPO] [--yes]
+const usageText = `usage: compass setup [--hub OWNER/REPO] [--hub-dir DIR] [--yes]
                      [--prefix DIR] [--agents LIST] [--okf-bin FILE]
 
-Set up this machine for OKF knowledge. It asks for the org and your hub repo
-(flags skip the questions), checks that the hub is readable with your git
-credentials, and stops before writing anything if it is not. Then it:
+Set up this machine for OKF knowledge. It asks for your hub repo and the
+folder to clone it into (flags skip the questions), checks that the hub is
+readable with your git credentials and that the folder is free or already
+holds a clone of it, and stops before writing anything if not. Then it:
   - installs the pinned okf into DIR/bin (default DIR: ~/.local);
-  - records the org and hub in $XDG_CONFIG_HOME/compass/config
-    (default ~/.config/compass/config);
+  - clones the hub into its folder, or reuses the clone already there;
+  - records the hub and its folder in $XDG_CONFIG_HOME/compass/config
+    (default ~/.config/compass/config); ` + "`compass hub assemble`" + `, ` + "`hub check`" + `,
+    ` + "`stamp`" + ` and ` + "`sync`" + ` use that folder when given none;
   - installs the OKF skill into each agent's user-level skill folder:
       claude  ${CLAUDE_CONFIG_DIR:-~/.claude}/skills/okf
       cursor  ~/.cursor/skills/okf
@@ -41,9 +45,9 @@ credentials, and stops before writing anything if it is not. Then it:
 Running it again changes nothing.
 
 flags:
-  --org ORG         GitHub account that owns the hub and its repos
-                    (default: OKF_ORG, the user config, then compass's config.env)
   --hub OWNER/REPO  your hub repo (default: the one already in the user config)
+  --hub-dir DIR     folder for the hub clone (default: the recorded folder of
+                    the same hub, else ~/src/<repo>)
   --yes             ask nothing; take the flags and defaults (for CI and cloud agents)
   --prefix DIR      install okf into DIR/bin (default: ~/.local)
   --agents LIST     comma-separated agents to give the skill to: claude, cursor, omp
@@ -51,8 +55,6 @@ flags:
   --okf-bin FILE    copy this okf binary instead of downloading the pinned
                     release; for tests and offline machines, not checksummed
 `
-
-var hubRe = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+$`)
 
 var knownAgents = []string{"claude", "cursor", "omp"}
 
@@ -77,9 +79,9 @@ func agentRoot(agent string, getenv func(string) string) string {
 }
 
 type options struct {
-	org, hub, prefix, agents, okfBin string
-	yes                              bool
-	orgSet, hubSet, agentsSet        bool
+	hub, hubDir, prefix, agents, okfBin string
+	yes                                 bool
+	hubSet, hubDirSet, agentsSet        bool
 }
 
 // Main runs `compass setup`.
@@ -92,8 +94,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, usageText) }
 	var o options
-	fs.StringVar(&o.org, "org", "", "")
 	fs.StringVar(&o.hub, "hub", "", "")
+	fs.StringVar(&o.hubDir, "hub-dir", "", "")
 	fs.BoolVar(&o.yes, "yes", false, "")
 	fs.StringVar(&o.prefix, "prefix", "", "")
 	fs.StringVar(&o.agents, "agents", "", "")
@@ -111,10 +113,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 	}
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case "org":
-			o.orgSet = true
 		case "hub":
 			o.hubSet = true
+		case "hub-dir":
+			o.hubDirSet = true
 		case "agents":
 			o.agentsSet = true
 		}
@@ -132,37 +134,43 @@ func setup(o options, stdin io.Reader, stdout, stderr io.Writer, getenv func(str
 		return errors.New("HOME is not set")
 	}
 	cfgPath := config.UserConfigPath(getenv)
-	var current string
-	if raw, err := os.ReadFile(cfgPath); err == nil {
-		current = string(raw)
+	current, err := config.UserConfig(getenv)
+	if err != nil {
+		return fmt.Errorf("%v; nothing written", err)
 	}
 
 	// Answers: flags first, then prompts (unless --yes), then defaults.
 	in := bufio.NewReader(stdin)
-	if !o.orgSet {
-		def, _ := config.Org(getenv)
-		o.org = def
-		if !o.yes {
-			o.org = ask(in, stdout, "GitHub org that owns your hub and repos", def)
-		}
-	}
+	curHub, curDir := config.EnvValue(current, "OKF_HUB"), config.EnvValue(current, "OKF_HUB_DIR")
 	if !o.hubSet {
-		def := config.EnvValue(current, "OKF_HUB")
-		o.hub = def
+		o.hub = curHub
 		if !o.yes {
-			o.hub = ask(in, stdout, "Your hub repo (owner/name)", def)
+			o.hub = ask(in, stdout, "Your hub repo (owner/name)", curHub)
 		}
 	}
 
 	// Check every input before changing anything.
-	if !config.ValidOrg(o.org) {
-		return fmt.Errorf("org %q is not a GitHub account name; nothing written", o.org)
-	}
 	if o.hub == "" {
 		return errors.New("no hub given: pass --hub OWNER/REPO; nothing written")
 	}
-	if !hubRe.MatchString(o.hub) {
+	owner, repo, ok := config.ParseRepoURL("https://github.com/" + o.hub)
+	if !ok {
 		return fmt.Errorf("hub %q is not OWNER/REPO; nothing written", o.hub)
+	}
+	o.hub = owner + "/" + repo
+	if !o.hubDirSet {
+		def := filepath.Join(home, "src", repo)
+		if curDir != "" && strings.EqualFold(curHub, o.hub) {
+			def = curDir
+		}
+		o.hubDir = def
+		if !o.yes {
+			o.hubDir = ask(in, stdout, "Folder to clone it into", def)
+		}
+	}
+	hubDir, err := absPath(o.hubDir, home)
+	if err != nil {
+		return fmt.Errorf("hub folder %q: %v; nothing written", o.hubDir, err)
 	}
 	agents, err := pickAgents(o, getenv)
 	if err != nil {
@@ -178,6 +186,10 @@ func setup(o options, stdin io.Reader, stdout, stderr io.Writer, getenv func(str
 			"setup: git reads the hub, and `compass hub assemble` its repos, over https://github.com/;"+
 			" give git credentials for it (for example `gh auth setup-git`) and run setup again", o.hub, err)
 	}
+	reuse, err := existingClone(hubDir, o.hub)
+	if err != nil {
+		return fmt.Errorf("%v; nothing written. Pass --hub-dir with an empty or missing folder, or a clone of %s", err, o.hub)
+	}
 
 	prefix := o.prefix
 	if prefix == "" {
@@ -185,19 +197,29 @@ func setup(o options, stdin io.Reader, stdout, stderr io.Writer, getenv func(str
 	}
 	bin := filepath.Join(prefix, "bin")
 
-	// okf first: it is the only step that can fail on the network.
+	// okf first: a failed download leaves nothing behind. The hub was read
+	// above, so the clone after it rarely fails.
 	if err := installOKF(bin, o, stdout, stderr, getenv); err != nil {
 		return err
 	}
 
-	want := fmt.Sprintf("# Written by compass setup.\nOKF_ORG=%s\nOKF_HUB=%s\n", o.org, o.hub)
+	if reuse {
+		fmt.Fprintf(stdout, "setup: reusing the clone of %s at %s\n", o.hub, hubDir)
+	} else {
+		if err := cloneHub(o.hub, hubDir); err != nil {
+			return fmt.Errorf("cloning hub %s into %s: %v; config and skills not written", o.hub, hubDir, err)
+		}
+		fmt.Fprintf(stdout, "setup: cloned %s into %s\n", o.hub, hubDir)
+	}
+
+	want := fmt.Sprintf("# Written by compass setup.\nOKF_HUB=%s\nOKF_HUB_DIR=%s\n", o.hub, hubDir)
 	if current == want {
-		fmt.Fprintf(stdout, "setup: config at %s is current (org %s, hub %s)\n", cfgPath, o.org, o.hub)
+		fmt.Fprintf(stdout, "setup: config at %s is current (hub %s at %s)\n", cfgPath, o.hub, hubDir)
 	} else {
 		if err := writeFileAtomic(cfgPath, []byte(want), 0o644); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "setup: recorded org %s and hub %s in %s\n", o.org, o.hub, cfgPath)
+		fmt.Fprintf(stdout, "setup: recorded hub %s at %s in %s\n", o.hub, hubDir, cfgPath)
 	}
 
 	for _, a := range agents {
@@ -289,6 +311,97 @@ func checkHub(hub string) error {
 	return nil
 }
 
+// absPath expands a leading ~ to home and makes p absolute.
+func absPath(p, home string) (string, error) {
+	if p == "" {
+		return "", errors.New("empty path")
+	}
+	if p == "~" {
+		p = home
+	} else if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		p = filepath.Join(home, rest)
+	}
+	return filepath.Abs(p)
+}
+
+// existingClone reports whether dir already holds a clone of hub, so setup
+// reuses it. A missing or empty dir is free for a fresh clone; anything else
+// is an error.
+func existingClone(dir, hub string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && len(entries) == 0) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("hub folder %s: %v", dir, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return false, fmt.Errorf("hub folder %s is not empty and is not a git clone", dir)
+	}
+	// The configured URL first, before any url.<base>.insteadOf rewrite: a
+	// user who maps https://github.com/ to ssh still has a clone of the same
+	// hub. Then the rewritten one, for host aliases that map to GitHub.
+	var origin string
+	for _, args := range [][]string{{"config", "--get", "remote.origin.url"}, {"remote", "get-url", "origin"}} {
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
+		if err != nil {
+			continue
+		}
+		remote := withoutUserinfo(strings.TrimSpace(string(out)))
+		if strings.EqualFold(githubRepo(remote), hub) {
+			return true, nil
+		}
+		if origin == "" {
+			origin = remote
+		}
+	}
+	if origin == "" {
+		origin = "no origin"
+	}
+	return false, fmt.Errorf("hub folder %s holds a clone of %s, not %s", dir, origin, hub)
+}
+
+// withoutUserinfo drops the user and password from a URL-form remote, so a
+// token in it is neither matched on nor printed. scp-form remotes
+// (git@host:path) carry no password and come back unchanged.
+func withoutUserinfo(remote string) string {
+	if u, err := url.Parse(remote); err == nil && u.Scheme != "" && u.User != nil {
+		u.User = nil
+		return u.String()
+	}
+	return remote
+}
+
+var originRe = regexp.MustCompile(`^(?:https://github\.com/|git@github\.com:|ssh://github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$`)
+
+// githubRepo returns OWNER/REPO for a GitHub https or ssh remote URL without
+// userinfo, else "".
+func githubRepo(remote string) string {
+	if m := originRe.FindStringSubmatch(remote); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// cloneHub clones hub into dir over https with the caller's git credentials,
+// never prompting for them, as checkHub reads it.
+func cloneHub(hub, dir string) error {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return err
+	}
+	cmd := exec.Command("git", "clone", "-q", "https://github.com/"+hub+".git", dir)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(errOut.String()); msg != "" {
+			return errors.New(msg)
+		}
+		return err
+	}
+	return nil
+}
+
 func installOKF(bin string, o options, stdout, stderr io.Writer, getenv func(string) string) error {
 	target := filepath.Join(bin, "okf")
 	if o.okfBin != "" {
@@ -307,14 +420,8 @@ func installOKF(bin string, o options, stdout, stderr io.Writer, getenv func(str
 		return nil
 	}
 	// Download and check the pinned release on every run, as the installer
-	// script did, but rewrite okf only when it differs. The release lives at
-	// <org>/okf; take the org setup chose.
-	okf, label, err := okfinstall.Fetch(func(k string) string {
-		if k == "OKF_ORG" {
-			return o.org
-		}
-		return getenv(k)
-	}, stderr)
+	// script did, but rewrite okf only when it differs.
+	okf, label, err := okfinstall.Fetch(getenv, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "okf install: %v\n", err)
 		return errors.New("okf install failed; config and skills not written")

@@ -10,10 +10,11 @@ export OKF
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 git_isolated "$work/gitconfig"
-export OKF_ORG=testorg OKF_HUB_CACHE="$work/cache"
+export OKF_HUB_CACHE="$work/cache"
 R="$work/remotes"
 mkdir -p "$R"
-map_org testorg "$R"
+map_owner testorg "$R"
+map_owner otherorg "$R"
 
 P="$TESTDATA/proto"
 make_folder_remote "$R/billing-api.git" "$P/billing-api/okf"
@@ -95,7 +96,7 @@ check "unreachable remote exits non-zero in CI" test "$rc" -ne 0
 check "unreachable remote names the repo" grep -q 'gone-repo: cannot fetch' <<<"$out"
 check "other repos still assembled when one fails" test -f "$U/repos/billing-api/overview.md"
 
-for url in "https://github.com/otherorg/billing-api" "file://$R/billing-api" "https://github.com/testorg/../x" "git@github.com:testorg/billing-api.git"; do
+for url in "http://github.com/testorg/billing-api" "file://$R/billing-api" "https://github.com/testorg/../x" "git@github.com:testorg/billing-api.git"; do
   X="$work/hub-url"
   new_hub "$X"
   echo "evil $url folder" >> "$X/repos.txt"
@@ -104,6 +105,12 @@ for url in "https://github.com/otherorg/billing-api" "file://$R/billing-api" "ht
   check "rejects $url" bash -c "[ $rc -ne 0 ] && grep -q 'evil: URL' <<<'$out'"
   check "nothing fetched for $url" bash -c "[ ! -d '$X/repos' ] && [ ! -d '$work/cache' ]"
 done
+
+O="$work/hub-owner"
+new_hub "$O"
+echo "other-owner https://github.com/otherorg/billing-api folder" >> "$O/repos.txt"
+check "assembles a repo from another GitHub owner" "$COMPASS" hub assemble --ci "$O"
+check "another owner's repo is copied" test -f "$O/repos/other-owner/overview.md"
 
 echo "== local mode"
 L="$work/hub-local"

@@ -1,0 +1,41 @@
+name: OKF bundle check
+description: >-
+  Fail when an OKF bundle has a strict-validator finding or out-of-date index
+  files. Builds compass from this action's own checkout, so pin the action by
+  commit SHA: the binary always matches the pinned code (plan decision 16).
+inputs:
+  bundle:
+    description: Bundle path inside the checkout (okf in folder mode, . on okf/main).
+    required: false
+    default: okf
+runs:
+  using: composite
+  steps:
+    # $GITHUB_ACTION_PATH, not github.action_path in `with:`, which names the
+    # host path inside container jobs (actions/runner#2185).
+    - name: Locate compass
+      id: compass
+      shell: bash
+      run: echo "root=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_OUTPUT"
+    # No setup-go cache: it keys on a go.sum under GITHUB_WORKSPACE, and
+    # compass's go.sum lives in the action's checkout, outside it.
+    - name: Set up Go
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      with:
+        go-version-file: ${{ steps.compass.outputs.root }}/go.mod
+        cache: false
+    - name: Build compass
+      shell: bash
+      working-directory: ${{ steps.compass.outputs.root }}
+      env:
+        GOWORK: "off"
+        GOFLAGS: ""
+      run: go build -trimpath -o "$RUNNER_TEMP/compass-bin/compass" ./cmd/compass
+    - name: Install pinned okf
+      shell: bash
+      run: '"$RUNNER_TEMP/compass-bin/compass" okf install --dest "$RUNNER_TEMP/okf-bin"'
+    - name: Check bundle
+      shell: bash
+      env:
+        BUNDLE: ${{ inputs.bundle }}
+      run: OKF="$RUNNER_TEMP/okf-bin/okf" "$RUNNER_TEMP/compass-bin/compass" bundle check "$BUNDLE"

@@ -4,7 +4,7 @@
 # billing-api clone seeded from testdata/proto plus test/skill-eval/code, and,
 # for the cross-repo and injected scenarios, a knowledge-hub checkout next to
 # it, pre-assembled with copy_hub. No run touches GitHub: the hub's
-# https://github.com/$OKF_ORG/ URLs are rewritten to the local remotes.
+# https://github.com/$org/ URLs are rewritten to the local remotes.
 #
 # Usage: skill-eval.sh --agent claude|omp [--runs N] [--scenario NAME]
 #                      [--timeout SECS] [--model MODEL]
@@ -61,7 +61,7 @@ fi
 
 here=$TOOLS_ROOT/test/skill-eval
 okf=$(okf_bin) || die "no okf binary"
-org=$(sed -n 's/^OKF_ORG=//p' "$TOOLS_ROOT/config.env")
+org="okf-eval"   # the GitHub owner the local remotes stand in for
 out=${OKF_EVAL_OUT:-$TOOLS_ROOT/.cache/skill-eval/$(date -u +%Y%m%dT%H%M%SZ)-$agent}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -83,7 +83,7 @@ cp "$COMPASS" "$home/.local/bin/compass"
   git init -q "$out/setup/seed" && git -C "$out/setup/seed" commit -q --allow-empty -m hub
   git clone -q --bare "$out/setup/seed" "$out/setup/remotes/knowledge-hub.git"
   HOME=$home XDG_CONFIG_HOME=$home/.config CLAUDE_CONFIG_DIR=$home/.claude PI_CODING_AGENT_DIR=$home/.omp/agent \
-    "$home/.local/bin/compass" setup --org "$org" --hub "$org/knowledge-hub" --yes \
+    "$home/.local/bin/compass" setup --hub "$org/knowledge-hub" --hub-dir "$home/src/knowledge-hub" --yes \
     --prefix "$home/.local" --agents "$agent" --okf-bin "$okf" </dev/null
 ) > "$out/install.log" 2>&1 || { cat "$out/install.log"; die "compass setup failed"; }
 
@@ -180,6 +180,9 @@ prepare() {
     git -C "$hub" init -q && git -C "$hub" add -A && git -C "$hub" commit -qm hub
     echo "HUB_BASE=$(git -C "$hub" rev-parse HEAD)" >> "$run/base.env"
   fi
+  # The setup config, with the hub clone pointed at this run's hub.
+  mkdir -p "$run/config/compass"
+  sed "s|^OKF_HUB_DIR=.*|OKF_HUB_DIR=$run/knowledge-hub|" "$home/.config/compass/config" > "$run/config/compass/config"
   refs "$run" > "$run/refs-before.txt"
   rm -f /tmp/okf-eval-pwned
 }
@@ -201,8 +204,8 @@ run_agent() {
   (
     cd "$run/billing-api" || exit 1
     export PATH=$home/.local/bin:$PATH OKF_HUB_CACHE=$run/hub-cache GH_TOKEN=okf-eval-no-github
-    export XDG_CONFIG_HOME=$home/.config   # the config `compass setup` wrote
-    unset OKF OKF_ORG
+    export XDG_CONFIG_HOME=$run/config   # the config `compass setup` wrote, per run
+    unset OKF
     if [ -n "$claude_isolated" ]; then export CLAUDE_CONFIG_DIR=$home/.claude; fi
     timeout -k 30 "$timeout_s" "${cmd[@]}" < /dev/null > "$run/transcript.jsonl" 2> "$run/agent.err"
   )

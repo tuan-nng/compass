@@ -29,7 +29,7 @@ const (
 )
 
 // Env is the environment the jobs run with in tests.
-var Env = map[string]string{"GITHUB_TOKEN": Token, "OKF_ORG": "acme"}
+var Env = map[string]string{"GITHUB_TOKEN": Token}
 
 // Getenv looks names up in Env.
 func Getenv(name string) string { return Env[name] }

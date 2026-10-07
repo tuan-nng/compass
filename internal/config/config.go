@@ -1,5 +1,6 @@
-// Package config reads the org name and the hub control files repos.txt and
-// checks.txt (plan decision 7, plan Design "Interfaces").
+// Package config reads the user config that `compass setup` writes and the
+// hub control files repos.txt and checks.txt (plan decisions 3 and 7, plan
+// Design "Interfaces").
 package config
 
 import (
@@ -12,12 +13,10 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
-
-	"compass"
 )
 
-// Error is a configuration problem: a bad org name, an unreadable or
-// malformed control file, or a missing token.
+// Error is a configuration problem: an unreadable user config, no recorded
+// hub folder, an unreadable or malformed control file, or a missing token.
 type Error struct{ msg string }
 
 func (e *Error) Error() string { return e.msg }
@@ -30,7 +29,19 @@ func IsError(err error) bool {
 	return errors.As(err, &e)
 }
 
-var orgRe = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$`)
+// repoURLRe matches https://github.com/<owner>/<repo>, optionally with .git;
+// any owner is accepted (plan decision 7).
+var repoURLRe = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)/([A-Za-z0-9._-]+?)(?:\.git)?$`)
+
+// ParseRepoURL splits https://github.com/<owner>/<repo>[.git] into owner and
+// repo; ok is false for any other URL.
+func ParseRepoURL(u string) (owner, repo string, ok bool) {
+	m := repoURLRe.FindStringSubmatch(u)
+	if m == nil || m[2] == "." || m[2] == ".." {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
 
 // EnvValue returns the last KEY=value assignment in env-file text, with
 // surrounding quotes removed. Comments and blank lines are skipped.
@@ -46,31 +57,32 @@ func EnvValue(text, key string) string {
 	return val
 }
 
-// Org returns OKF_ORG from the environment, else from the user config that
-// `compass setup` writes, else from the embedded config.env, and checks it is
-// a GitHub account name.
-func Org(getenv func(string) string) (string, error) {
-	org := strings.TrimSpace(getenv("OKF_ORG"))
-	if org == "" {
-		if p := UserConfigPath(getenv); p != "" {
-			raw, err := os.ReadFile(p)
-			if err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return "", errorf("cannot read %s: %v", p, err)
-			}
-			org = EnvValue(string(raw), "OKF_ORG")
-		}
+// UserConfig returns the user config text, or "" when there is none.
+func UserConfig(getenv func(string) string) (string, error) {
+	p := UserConfigPath(getenv)
+	if p == "" {
+		return "", nil
 	}
-	if org == "" {
-		org = EnvValue(compass.ConfigEnv, "OKF_ORG")
+	raw, err := os.ReadFile(p)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", errorf("cannot read %s: %v", p, err)
 	}
-	if !ValidOrg(org) {
-		return "", errorf("OKF_ORG is not a GitHub account name: %q", org)
-	}
-	return org, nil
+	return string(raw), nil
 }
 
-// ValidOrg reports whether s is a GitHub account name.
-func ValidOrg(s string) bool { return orgRe.MatchString(s) }
+// HubDir returns the hub clone folder that `compass setup` recorded as
+// OKF_HUB_DIR in the user config. The hub commands use it when given no
+// folder.
+func HubDir(getenv func(string) string) (string, error) {
+	text, err := UserConfig(getenv)
+	if err != nil {
+		return "", err
+	}
+	if d := EnvValue(text, "OKF_HUB_DIR"); d != "" {
+		return d, nil
+	}
+	return "", errorf("no hub folder given, and `compass setup` recorded none in %s", UserConfigPath(getenv))
+}
 
 // UserConfigPath is $XDG_CONFIG_HOME/compass/config, else
 // $HOME/.config/compass/config; empty when neither variable is set.
@@ -172,9 +184,9 @@ func pyIsSpace(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x
 var repoNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // ParseRepos reads repos.txt: "<name> <git URL> <folder|branch>" per line.
-// Every URL must be https://github.com/<org>/<repo>, optionally with .git.
-func ParseRepos(path, org string) (*Repos, error) {
-	urlRe := regexp.MustCompile(`^https://github\.com/` + regexp.QuoteMeta(org) + `/([A-Za-z0-9._-]+?)(?:\.git)?$`)
+// Every URL must be https://github.com/<owner>/<repo>, optionally with .git,
+// for any owner (plan decision 7).
+func ParseRepos(path string) (*Repos, error) {
 	lines, err := contentLines(path)
 	if err != nil {
 		return nil, err
@@ -190,9 +202,9 @@ func ParseRepos(path, org string) (*Repos, error) {
 		if !repoNameRe.MatchString(name) || name == "." || name == ".." {
 			return nil, errorf("%s: bad repo name %q", where, name)
 		}
-		m := urlRe.FindStringSubmatch(u)
-		if m == nil {
-			return nil, errorf("%s: URL must be https://github.com/%s/<repo>", where, org)
+		owner, repo, ok := ParseRepoURL(u)
+		if !ok {
+			return nil, errorf("%s: URL must be https://github.com/<owner>/<repo>", where)
 		}
 		if mode != "folder" && mode != "branch" {
 			return nil, errorf("%s: mode must be folder or branch", where)
@@ -200,7 +212,7 @@ func ParseRepos(path, org string) (*Repos, error) {
 		if _, dup := rs.ByName[name]; dup {
 			return nil, errorf("%s: duplicate repo name %s", where, name)
 		}
-		r := &Repo{Name: name, URL: u, Mode: mode, Owner: org, Repo: m[1]}
+		r := &Repo{Name: name, URL: u, Mode: mode, Owner: owner, Repo: repo}
 		rs.List = append(rs.List, r)
 		rs.ByName[name] = r
 	}

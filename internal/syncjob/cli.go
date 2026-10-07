@@ -16,7 +16,7 @@ import (
 
 func osGetenv(name string) string { return os.Getenv(name) }
 
-const usage = "usage: compass sync [-h] --hub DIR [--dry-run] [--token-env NAME] [--api-url URL]\n" +
+const usage = "usage: compass sync [-h] [--hub DIR] [--dry-run] [--token-env NAME] [--api-url URL]\n" +
 	"                    [--ignore-login LOGIN] [--now DATETIME]\n"
 
 const help = usage + `
@@ -26,7 +26,8 @@ pull request merges, and clean up okf/<b> branches (research report section
 
 options:
   -h, --help            show this help message and exit
-  --hub DIR             hub checkout holding repos.txt (and checks.txt)
+  --hub DIR             hub checkout holding repos.txt (default: the hub
+                        clone that ` + "`compass setup`" + ` recorded)
   --dry-run             read GitHub and log what would change; make no write
                         calls
   --token-env NAME      environment variable holding the API token (default:
@@ -74,11 +75,6 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string, cl
 	if fs.NArg() > 0 {
 		return usageError(stderr, "unrecognized arguments: "+strings.Join(fs.Args(), " "))
 	}
-	hubSet := false
-	fs.Visit(func(f *flag.Flag) { hubSet = hubSet || f.Name == "hub" })
-	if !hubSet {
-		return usageError(stderr, "the following arguments are required: --hub")
-	}
 	var now time.Time
 	if *nowFlag == "" {
 		now = clock().UTC()
@@ -90,7 +86,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string, cl
 		now = t
 	}
 	log := func(s string) { fmt.Fprintln(stdout, s) }
-	org, err := config.Org(getenv)
+	h := *hub
+	var err error
+	if h == "" {
+		h, err = config.HubDir(getenv)
+	}
 	if err == nil {
 		var token string
 		token, err = config.Token(*tokenEnv, getenv)
@@ -103,7 +103,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string, cl
 				base = github.DefaultAPIURL
 			}
 			var code int
-			code, err = Run(*hub, newClient(token, base, *dryRun), org, now, *dryRun, ignore, log)
+			code, err = Run(h, newClient(token, base, *dryRun), now, *dryRun, ignore, log)
 			if err == nil {
 				return code
 			}

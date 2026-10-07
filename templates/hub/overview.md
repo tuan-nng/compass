@@ -1,68 +1,86 @@
 ---
 type: Overview
 title: Knowledge hub
-description: How to fill in this hub, connect it to its repos, and protect the files that decide what the writer key touches.
+description: How to fill in this hub, assemble and check it on your machine, run the stamper and sync job, and protect its control files.
 tags: [overview, hub]
 status: stable
-generated: { by: compass/hub-template, at: 2026-10-06T12:00:00Z }
+generated: { by: compass/hub-template, at: 2026-10-07T12:00:00Z }
 ---
 # Knowledge hub
 
 This repo is an OKF knowledge hub made from the compass hub template. It holds
 knowledge that spans repos, in [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md),
 and assembles each listed repo's own bundle into `repos/<name>/` (git
-ignores that folder).
+ignores that folder). Everything runs on people's machines, with their own
+GitHub credentials: the hub has no CI, no workflows and no stored keys.
 
 ## Fill it in
 
-- `repos.txt`: one row per repo, `<name> <URL> <folder|branch>`. Only
-  `https://github.com/<org>/` URLs of the org that owns this hub are accepted.
+- `repos.txt`: one row per repo, `<name> <URL> <folder|branch>`. Any
+  `https://github.com/<owner>/<repo>` URL is accepted, so a hub can list repos
+  from several accounts.
 - `checks.txt`: one row per machine check whose passing run on a repo's
-  default branch stamps concepts `verified: process:<actor>`.
+  default branch earns concepts a `verified: process:<actor>` stamp.
 - `cross-repo/`: concepts of type `Cross-Repo Dependency`, the only place
   links between repos live. Link a repo's concept from the hub root, as
   `/repos/<name>/<id>.md`.
 - `decisions/` and `glossary/`: decisions and vocabulary that span repos.
 
-After adding or changing concepts, run `okf index .` and commit the
-regenerated `index.md` files.
+After adding or changing concepts, delete any assembled `repos/` folder, run
+`okf index .` and commit the regenerated `index.md` files. With `repos/`
+present, the root index would list it.
 
 ## Connect it
 
-1. In `.github/workflows/hub.yml` and `.github/workflows/writer.yml`, replace
-   `OKF_ORG` with the account that owns compass and `COMPASS_SHA` with the
-   full commit SHA of the compass version to use.
-2. In `CODEOWNERS`, replace `@OKF_HUB_OWNERS` with the people who approve
-   changes to the workflows, `CODEOWNERS`, `repos.txt` and `checks.txt`.
-3. Create the reader app, which hub CI uses to read the listed repos:
-   `compass app create --role reader --hub <org>/<this-repo>`. Install it on
-   the repos in `repos.txt` only.
-4. Create the writer app, which the writer workflow uses to merge knowledge
-   pull requests and push `process:` stamps:
-   `compass app create --role writer --hub <org>/<this-repo>`. It creates the
-   `okf-write` environment, limited to this repo's default branch, and keeps
-   the app's key there.
-5. Each developer runs `compass setup` and gives this repo as the hub.
+1. In `CODEOWNERS`, replace `@OKF_HUB_OWNERS` with the people who approve
+   changes to `CODEOWNERS`, `repos.txt` and `checks.txt`.
+2. Each developer runs `compass setup` and gives this repo as the hub. Setup
+   clones it (by default into `~/src/<repo>`) and records the clone, so the
+   commands below need no folder argument when run for that clone.
+3. Each listed repo runs the compass bundle check on its pull requests: copy
+   compass's `templates/folder-workflow.yml` (folder mode) or
+   `templates/okf-main-workflow.yml` (branch mode, on `okf/main` only).
+
+## Check it
+
+Before opening a hub pull request, and before approving one, assemble the
+view and check it:
+
+```
+compass hub assemble
+compass hub check
+```
+
+The check fails on a broken cross-repo link. No repo pipeline re-checks the
+hub: when a hub pull request links knowledge that hasn't reached a repo's
+default branch (or `okf/main`) yet, run both commands again after that change
+merges.
+
+Query the assembled view with `okf search . --text <terms>` or
+`okf backlinks . repos/<name>/<id>`.
+
+## Run the writers
+
+Hub owners run the writers from their clone, on demand, with a GitHub token in
+`GITHUB_TOKEN` (or the variable named by `--token-env`). Each run is safe to
+repeat; `--dry-run` reports what it would do without writing.
+
+- `compass stamp` commits `process:` stamps for the concepts `checks.txt`
+  covers, once their check passed on the default branch head. It pushes
+  straight to each repo's default branch (or `okf/main`), so a protected
+  branch needs a bypass for the person who runs it.
+- `compass sync` merges approved, green branch-mode knowledge pull requests
+  after their code pull request merges, and cleans up `okf/<b>` branches.
 
 ## Protect it
 
-The writer key can push to every listed repo, so the files that decide what
-it runs and touches need review:
+`repos.txt` decides what every developer's assembly fetches and `checks.txt`
+decides what gets stamped, so changes to them need review:
 
 - a ruleset on the default branch that blocks direct pushes and requires a
   pull request with a code-owner approval;
-- `CODEOWNERS` on `.github/`, `CODEOWNERS`, `repos.txt` and `checks.txt`;
-- the `okf-write` environment, usable only from the default branch.
+- `CODEOWNERS` on `CODEOWNERS`, `repos.txt` and `checks.txt`.
 
-Rulesets and environments on a private repo need a paid GitHub plan (Team or
-Enterprise). On GitHub Free they work only on public repos, so a private hub
-on Free has neither protection; don't create the writer app there.
-
-## Use it
-
-Assemble the view locally with `compass hub assemble .`, then query it with
-`okf search . --text <terms>` or `okf backlinks . repos/<name>/<id>`. Hub CI
-runs the same assembly nightly, on manual dispatch and on pull requests. No
-repo pipeline triggers it: when a hub pull request links knowledge that hasn't
-reached a repo's default branch (or `okf/main`) yet, re-run its check after
-that change merges.
+Rulesets on a private repo need a paid GitHub plan. On GitHub Free they work
+only on public repos, so a private hub on Free relies on reviewers following
+the rule by hand.

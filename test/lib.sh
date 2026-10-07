@@ -14,7 +14,7 @@ fi
 export COMPASS
 compass() { "$COMPASS" "$@"; }
 
-# Keep the developer's own `compass setup` config (its org and hub) out of the
+# Keep the developer's own `compass setup` config (its hub clone) out of the
 # suites: they read a config folder that holds none (test/setup.sh sets its own).
 export XDG_CONFIG_HOME="$TOOLS_ROOT/.cache/no-user-config"
 
@@ -85,10 +85,11 @@ git_isolated() {
   git config --global protocol.file.allow always
 }
 
-# map_org <org> <remotes-dir>: make https://github.com/<org>/<x> fetch from
-# <remotes-dir>/<x>, so scripts see real-looking URLs while tests stay offline.
-map_org() {
-  git config --global "url.file://$2/.insteadOf" "https://github.com/$1/"
+# map_owner <owner> <remotes-dir>: make https://github.com/<owner>/<x> fetch
+# from <remotes-dir>/<x>, so scripts see real-looking URLs while tests stay
+# offline.
+map_owner() {
+  git config --global --add "url.file://$2/.insteadOf" "https://github.com/$1/"
 }
 
 # make_folder_remote <bare-path> <bundle-dir>: a code repo whose default

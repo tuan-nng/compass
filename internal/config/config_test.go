@@ -20,13 +20,13 @@ func write(t *testing.T, name, text string) string {
 // str.splitlines: \r\n, a lone \r, \f and U+2028 each end a line.
 func TestRepoErrorsNameThePythonLineNumber(t *testing.T) {
 	for name, text := range map[string]string{
-		"crlf":    "# h\r\nok https://github.com/acme/ok folder\r\nbad https://github.com/evil/x folder\r\n",
-		"lone cr": "# h\rok https://github.com/acme/ok folder\rbad https://github.com/evil/x folder\r",
-		"ff":      "# h\fok https://github.com/acme/ok folder\nbad https://github.com/evil/x folder\n",
-		"u2028":   "# h\u2028ok https://github.com/acme/ok folder\nbad https://github.com/evil/x folder\n",
+		"crlf":    "# h\r\nok https://github.com/acme/ok folder\r\nbad http://github.com/evil/x folder\r\n",
+		"lone cr": "# h\rok https://github.com/acme/ok folder\rbad http://github.com/evil/x folder\r",
+		"ff":      "# h\fok https://github.com/acme/ok folder\nbad http://github.com/evil/x folder\n",
+		"u2028":   "# h\u2028ok https://github.com/acme/ok folder\nbad http://github.com/evil/x folder\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := ParseRepos(write(t, "repos.txt", text), "acme")
+			_, err := ParseRepos(write(t, "repos.txt", text))
 			if err == nil || !strings.HasPrefix(err.Error(), "repos.txt:3: bad ") {
 				t.Fatalf("err = %v, want repos.txt:3: bad ...", err)
 			}
@@ -35,7 +35,7 @@ func TestRepoErrorsNameThePythonLineNumber(t *testing.T) {
 }
 
 func TestChecksRows(t *testing.T) {
-	repos, err := ParseRepos(write(t, "repos.txt", "api https://github.com/acme/api.git folder\n"), "acme")
+	repos, err := ParseRepos(write(t, "repos.txt", "api https://github.com/acme/api.git folder\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,41 +66,64 @@ func TestChecksRows(t *testing.T) {
 	}
 }
 
-func TestOrgPrecedence(t *testing.T) {
+// Any GitHub owner is accepted, and the owner comes from each URL (plan
+// decision 7); anything but https://github.com/<owner>/<repo> is refused.
+func TestReposAcceptAnyOwner(t *testing.T) {
+	repos, err := ParseRepos(write(t, "repos.txt",
+		"api https://github.com/acme/api.git folder\nweb https://github.com/other-co/web-app branch\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := repos.ByName["api"]; r.FullName() != "acme/api" || r.API() != "/repos/acme/api" {
+		t.Errorf("api: %+v", r)
+	}
+	if r := repos.ByName["web"]; r.FullName() != "other-co/web-app" || r.Mode != "branch" {
+		t.Errorf("web: %+v", r)
+	}
+	for _, u := range []string{
+		"http://github.com/acme/x",
+		"https://github.com/acme/../x",
+		"https://github.com/acme/..",
+		"https://github.com/-acme/x",
+		"https://github.com/acme/x/y",
+		"git@github.com:acme/x.git",
+		"https://gitlab.com/acme/x",
+	} {
+		if _, err := ParseRepos(write(t, "repos.txt", "x "+u+" folder\n")); err == nil || !strings.Contains(err.Error(), "URL must be") {
+			t.Errorf("%s: err = %v", u, err)
+		}
+	}
+}
+
+func TestHubDir(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "compass", "config")
+	env := func(k string) string {
+		if k == "XDG_CONFIG_HOME" {
+			return dir
+		}
+		return ""
+	}
+	if _, err := HubDir(env); err == nil || !IsError(err) || !strings.Contains(err.Error(), "recorded none") {
+		t.Errorf("no config: err = %v", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cfg, []byte("# Written by compass setup.\nOKF_ORG=fromuser\nOKF_HUB=fromuser/hub\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfg, []byte("# Written by compass setup.\nOKF_HUB=acme/hub\nOKF_HUB_DIR=/src/my hub\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env := func(org string) func(string) string {
-		return func(k string) string {
-			switch k {
-			case "OKF_ORG":
-				return org
-			case "XDG_CONFIG_HOME":
-				return dir
-			}
-			return ""
-		}
+	if got, err := HubDir(env); err != nil || got != "/src/my hub" {
+		t.Errorf("recorded: got %q, %v", got, err)
 	}
-	if got, err := Org(env("fromenv")); err != nil || got != "fromenv" {
-		t.Errorf("env set: got %q, %v", got, err)
-	}
-	if got, err := Org(env("")); err != nil || got != "fromuser" {
-		t.Errorf("user config: got %q, %v", got, err)
-	}
-	// An unreadable user config is an error, not a silent fall back to the
-	// built-in org.
+	// An unreadable user config is an error, not "no hub recorded".
 	if err := os.Remove(cfg); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(cfg, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Org(env("")); err == nil || !IsError(err) || !strings.Contains(err.Error(), "cannot read") {
+	if _, err := HubDir(env); err == nil || !IsError(err) || !strings.Contains(err.Error(), "cannot read") {
 		t.Errorf("unreadable user config: err = %v", err)
 	}
 }

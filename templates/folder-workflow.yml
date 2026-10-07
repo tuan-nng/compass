@@ -1,8 +1,8 @@
 # Bundle check for a folder-mode repo, stored as .github/workflows/okf.yml on
 # the default branch. It checks okf/ on every pull request and push.
 #
-# Before committing, replace OKF_ORG with the account that owns compass and
-# COMPASS_SHA with the full commit SHA of the compass version to use.
+# Before committing, replace COMPASS_REPO with the compass repo (owner/name)
+# and COMPASS_SHA with the full commit SHA of the compass version to use.
 name: okf
 
 on:
@@ -21,6 +21,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: OKF_ORG/compass/actions/bundle-check@COMPASS_SHA
+      - uses: COMPASS_REPO/actions/bundle-check@COMPASS_SHA
         with:
           bundle: okf

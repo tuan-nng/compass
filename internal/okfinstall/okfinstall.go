@@ -137,13 +137,7 @@ func fetch(pinsName, pins, goos, goarch string, getenv func(string) string, stde
 	}
 	repo := pin("OKF_RELEASE_REPO")
 	if repo == "" {
-		// The pinned fork lives at $OKF_ORG/okf; OKF_ORG comes from the
-		// environment, else from the embedded config.env.
-		org, err := config.Org(getenv)
-		if err != nil {
-			return nil, "", err
-		}
-		repo = org + "/okf"
+		return nil, "", fail("OKF_RELEASE_REPO: missing in %s", pinsName)
 	}
 	tag, version := pin("OKF_TAG"), pin("OKF_VERSION")
 	if tag == "" {

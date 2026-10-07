@@ -16,13 +16,14 @@ import (
 	"compass/internal/validate"
 )
 
-const checkHelp = `Check an assembled hub, as hub CI does after ` + "`compass hub assemble`" + `:
+const checkHelp = `Check an assembled hub after ` + "`compass hub assemble`" + `:
   1. the strict validator passes, so a broken cross-repo link fails;
   2. for each repos/<name>/, the concepts ` + "`okf list`" + ` sees there equal the
      concept files copied, and are more than zero. This catches a bundle the
      tools silently skip, such as a symlinked one (research report, finding 1).
 
-Usage: compass hub check <hub-dir>
+Usage: compass hub check [<hub-dir>]
+       <hub-dir> defaults to the hub clone that ` + "`compass setup`" + ` recorded.
 Env:   OKF  path to the okf binary (default: okf on PATH)
 `
 
@@ -32,11 +33,20 @@ func CheckMain(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, checkHelp)
 		return 0
 	}
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: compass hub check <hub-dir>")
+	if len(args) > 1 || (len(args) == 1 && strings.HasPrefix(args[0], "-")) {
+		fmt.Fprintln(stderr, "usage: compass hub check [<hub-dir>]")
 		return 2
 	}
-	hub := args[0]
+	var hub string
+	if len(args) == 1 {
+		hub = args[0]
+	} else {
+		var err error
+		if hub, err = config.HubDir(os.Getenv); err != nil {
+			fmt.Fprintf(stderr, "hub check: %v\n", err)
+			return 2
+		}
+	}
 	if st, err := os.Stat(filepath.Join(hub, "repos")); err != nil || !st.IsDir() {
 		fmt.Fprintf(stderr, "hub check: %s/repos is missing; run `compass hub assemble` first\n", hub)
 		return 1

@@ -176,13 +176,7 @@ func TestPinsAndPlatform(t *testing.T) {
 		{"unsupported OS", pins("x"), "windows", "amd64", "unsupported OS: windows", noEnv},
 		{"unsupported CPU", pins("x"), "linux", "386", "unsupported CPU: 386", noEnv},
 		{"no checksum", pins("x"), "darwin", "arm64", "no pinned checksum for darwin/arm64 in test.env", noEnv},
-		{"bad org", "OKF_TAG=v1\nOKF_VERSION=1\n", "linux", "amd64", `OKF_ORG is not a GitHub account name: "bad org"`,
-			func(k string) string {
-				if k == "OKF_ORG" {
-					return "bad org"
-				}
-				return ""
-			}},
+		{"missing release repo", "OKF_TAG=v1\nOKF_VERSION=1\n", "linux", "amd64", "OKF_RELEASE_REPO: missing in test.env", noEnv},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := install(t.TempDir(), "test.env", tc.pins, tc.goos, tc.goarch, tc.getenv, io.Discard)

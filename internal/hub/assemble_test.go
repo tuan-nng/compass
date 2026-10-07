@@ -33,8 +33,8 @@ func TestStripFrontmatter(t *testing.T) {
 	}
 }
 
-// Every bad line is reported, comments start anywhere, and only blanks and
-// tabs separate fields.
+// Every bad line is reported, comments start anywhere, only blanks and tabs
+// separate fields, and any GitHub owner is accepted.
 func TestParseReposReportsEveryBadLine(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "repos.txt")
 	text := "# header\n" +
@@ -45,12 +45,13 @@ func TestParseReposReportsEveryBadLine(t *testing.T) {
 		"e https://github.com/acme/e\x0bfolder\n" +
 		"a https://github.com/acme/a2.git branch\n" +
 		"f https://github.com/acme/f folder\r\n" +
-		"g http://github.com/acme/g folder"
+		"g http://github.com/acme/g folder\n" +
+		"h https://github.com/other-co/h folder"
 	if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var stderr bytes.Buffer
-	repos, ok, err := parseRepos(p, "https://github.com/acme/", &stderr)
+	repos, ok, err := parseRepos(p, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,11 +60,11 @@ func TestParseReposReportsEveryBadLine(t *testing.T) {
 		"hub assemble: repos.txt:6: expected '<name> <git URL> <folder|branch>'\n" +
 		"hub assemble: repos.txt:7: duplicate repo name 'a'\n" +
 		"hub assemble: repos.txt:8: f: mode must be folder or branch, got 'folder\r'\n" +
-		"hub assemble: repos.txt:9: g: URL 'http://github.com/acme/g' is not under https://github.com/acme/; refusing to fetch anything\n"
+		"hub assemble: repos.txt:9: g: URL 'http://github.com/acme/g' is not https://github.com/<owner>/<repo>; refusing to fetch anything\n"
 	if ok || stderr.String() != want {
 		t.Errorf("ok=%v, messages:\n%q\nwant:\n%q", ok, stderr.String(), want)
 	}
-	if len(repos) != 2 || repos[0] != (listed{"a", "https://github.com/acme/a", "folder"}) || repos[1].name != "d" {
+	if len(repos) != 3 || repos[0] != (listed{"a", "https://github.com/acme/a", "folder"}) || repos[1].name != "d" || repos[2].name != "h" {
 		t.Errorf("repos %+v", repos)
 	}
 }

@@ -464,7 +464,7 @@ func TestChecksRowForUnknownRepoIsAConfigError(t *testing.T) {
 	e.logHas("checks.txt:1: ghost")
 }
 
-// The writer app must never commit a stamp that only review may grant
+// The stamper must never commit a stamp that only review may grant
 // (human:) or text that escapes the verified entry.
 func TestChecksRowActorMustBeProcess(t *testing.T) {
 	for _, actor := range []string{"human:alice", `"process:x, at: 2099-01-01T00:00:00Z }"`} {
@@ -478,9 +478,9 @@ func TestChecksRowActorMustBeProcess(t *testing.T) {
 	}
 }
 
-func TestReposURLOutsideOrgIsRejected(t *testing.T) {
+func TestReposURLNotOnGitHubIsRejected(t *testing.T) {
 	e := setup(t)
-	hub := ghfake.WriteHub(t, e.dir, "billing-api https://github.com/evil/billing-api folder\n", "")
+	hub := ghfake.WriteHub(t, e.dir, "billing-api https://gitlab.com/acme/billing-api folder\n", "")
 	e.code(e.main("--hub", hub, "--api-url", ghfake.API), 2)
 	e.logHas("repos.txt:1:")
 }

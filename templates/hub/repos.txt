@@ -1,7 +1,7 @@
 # <name> <git URL> <folder|branch>
 # One row per repo whose knowledge bundle the hub assembles into repos/<name>/.
 #   name    folder name under repos/; letters, digits, ".", "_" and "-"
-#   URL     https://github.com/<org>/<repo>, where <org> owns this hub
+#   URL     https://github.com/<owner>/<repo>, for any owner
 #   mode    folder: the bundle is okf/ on the default branch
 #           branch: the bundle is the root of the okf/main branch
 # Example:

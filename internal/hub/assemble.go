@@ -21,14 +21,15 @@ import (
 const assembleHelp = `Assemble the hub view: copy every repo bundle listed in <hub-dir>/repos.txt
 into <hub-dir>/repos/<name>/, fetching each one from its git remote.
 
-Usage: compass hub assemble [--ci | --local] <hub-dir>
+Usage: compass hub assemble [--ci | --local] [<hub-dir>]
+
+<hub-dir> defaults to the hub clone that ` + "`compass setup`" + ` recorded.
 
 repos.txt lines: <name> <git URL> <folder|branch>   (# comments allowed)
   folder: the okf/ folder of the remote's default branch
   branch: the root of the remote's okf/main branch (.git and .github skipped)
-Only https://github.com/$OKF_ORG/<repo> URLs are accepted; every line is
-checked before anything is fetched. OKF_ORG comes from the environment, else
-from the config.env built into compass.
+Only https://github.com/<owner>/<repo> URLs are accepted, for any owner; every
+line is checked before anything is fetched.
 
 A repo fails, and is named, when it cannot be fetched, its bundle has no
 index.md or overview.md, or its bundle contains a symlink. In CI ($CI=true or
@@ -46,10 +47,7 @@ const me = "hub assemble"
 // listed is one accepted repos.txt row.
 type listed struct{ name, url, kind string }
 
-var (
-	nameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	restRe = regexp.MustCompile(`^[A-Za-z0-9._-]+(\.git)?$`)
-)
+var nameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // AssembleMain runs `compass hub assemble`.
 func AssembleMain(args []string, stdout, stderr io.Writer) int {
@@ -80,15 +78,14 @@ func AssembleMain(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if hub == "" {
-		return die("usage: compass hub assemble [--ci|--local] <hub-dir>")
+		var err error
+		if hub, err = config.HubDir(os.Getenv); err != nil {
+			return die("%v", err)
+		}
 	}
 	reposTxt := filepath.Join(hub, "repos.txt")
 	if st, err := os.Stat(reposTxt); err != nil || !st.Mode().IsRegular() {
 		return die("no repos.txt in %s", hub)
-	}
-	org, err := config.Org(os.Getenv)
-	if err != nil {
-		return die("%v", err)
 	}
 	cache := os.Getenv("OKF_HUB_CACHE")
 	if cache == "" {
@@ -100,7 +97,7 @@ func AssembleMain(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// 1. Parse and check every line before fetching anything.
-	repos, ok, err := parseRepos(reposTxt, "https://github.com/"+org+"/", stderr)
+	repos, ok, err := parseRepos(reposTxt, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "%s: %v\n", me, err)
 		return 1
@@ -123,7 +120,7 @@ func AssembleMain(args []string, stdout, stderr io.Writer) int {
 
 // parseRepos reads repos.txt, printing one message per bad line; ok is false
 // when any line is bad. Text from the first # on a line is a comment.
-func parseRepos(path, prefix string, stderr io.Writer) (repos []listed, ok bool, err error) {
+func parseRepos(path string, stderr io.Writer) (repos []listed, ok bool, err error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, false, err
@@ -156,9 +153,8 @@ lines:
 			bad(n, "bad repo name '%s'", name)
 			continue
 		}
-		rest, under := strings.CutPrefix(url, prefix)
-		if !under || !restRe.MatchString(rest) {
-			bad(n, "%s: URL '%s' is not under %s; refusing to fetch anything", name, url, prefix)
+		if _, _, under := config.ParseRepoURL(url); !under {
+			bad(n, "%s: URL '%s' is not https://github.com/<owner>/<repo>; refusing to fetch anything", name, url)
 			continue
 		}
 		if kind != "folder" && kind != "branch" {

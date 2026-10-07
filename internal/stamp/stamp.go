@@ -79,8 +79,11 @@ func findJob(gh *github.Client, repo *config.Repo, row *config.CheckRow, def, he
 				fullName = v
 			}
 		}
+		// GitHub names are case-insensitive, and repos.txt may write the
+		// owner in any case.
+		fn, isStr := fullName.(string)
 		if r["path"] != any(path) || r["event"] != any("push") || r["head_branch"] != any(def) ||
-			r["head_sha"] != any(head) || fullName != any(repo.FullName()) {
+			r["head_sha"] != any(head) || !isStr || !strings.EqualFold(fn, repo.FullName()) {
 			continue
 		}
 		// The first of equal maxima wins, as Python's max does.
@@ -362,8 +365,8 @@ func short(sha string) string {
 
 // Run stamps every checks.txt row under hub and returns the exit code: 0 when
 // every repo succeeded, 1 when any failed, 2 on a configuration error.
-func Run(hub string, gh *github.Client, org string, dryRun bool, log func(string)) int {
-	repos, err := config.ParseRepos(filepath.Join(hub, "repos.txt"), org)
+func Run(hub string, gh *github.Client, dryRun bool, log func(string)) int {
+	repos, err := config.ParseRepos(filepath.Join(hub, "repos.txt"))
 	if err != nil {
 		log(fmt.Sprintf("%s: error: %v", Prog, err))
 		return 2
@@ -397,7 +400,7 @@ func Run(hub string, gh *github.Client, org string, dryRun bool, log func(string
 	return 1
 }
 
-const usage = "usage: compass stamp [-h] --hub DIR [--dry-run] [--token-env NAME] [--api-url URL]\n"
+const usage = "usage: compass stamp [-h] [--hub DIR] [--dry-run] [--token-env NAME] [--api-url URL]\n"
 
 const help = usage + `
 Write verified: process:<actor> stamps for the concepts each checks.txt row
@@ -405,7 +408,8 @@ covers, when its workflow job passed on the default-branch head.
 
 options:
   -h, --help        show this help message and exit
-  --hub DIR         hub checkout holding repos.txt (and checks.txt)
+  --hub DIR         hub checkout holding repos.txt and checks.txt (default:
+                    the hub clone that ` + "`compass setup`" + ` recorded)
   --dry-run         read GitHub and log what would change; make no write calls
   --token-env NAME  environment variable holding the API token (default:
                     GITHUB_TOKEN)
@@ -432,7 +436,6 @@ func parseArgs(args []string, stdout, stderr io.Writer) (o Options, exit int) {
 		return o, 2
 	}
 	names := []string{"--help", "--hub", "--dry-run", "--token-env", "--api-url"}
-	hasHub := false
 	var unknown []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -485,16 +488,13 @@ func parseArgs(args []string, stdout, stderr io.Writer) (o Options, exit int) {
 			}
 			switch opt {
 			case "--hub":
-				o.Hub, hasHub = value, true
+				o.Hub = value
 			case "--token-env":
 				o.TokenEnv = value
 			case "--api-url":
 				o.APIURL = value
 			}
 		}
-	}
-	if !hasHub {
-		return fail("the following arguments are required: --hub")
 	}
 	if len(unknown) > 0 {
 		return fail("unrecognized arguments: " + strings.Join(unknown, " "))
@@ -516,11 +516,15 @@ func MainWith(args []string, stdout, stderr io.Writer, getenv func(string) strin
 		return exit
 	}
 	log := func(s string) { fmt.Fprintln(stdout, s) }
-	org, err := config.Org(getenv)
+	hub := o.Hub
+	var err error
+	if hub == "" {
+		hub, err = config.HubDir(getenv)
+	}
 	if err == nil {
 		var token string
 		if token, err = config.Token(o.TokenEnv, getenv); err == nil {
-			return Run(o.Hub, newClient(token, APIURL(o.APIURL, getenv), o.DryRun), org, o.DryRun, log)
+			return Run(hub, newClient(token, APIURL(o.APIURL, getenv), o.DryRun), o.DryRun, log)
 		}
 	}
 	log(fmt.Sprintf("%s: error: %v", Prog, err))
