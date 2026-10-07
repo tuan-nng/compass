@@ -402,3 +402,5 @@ Inputs with fixed deadlines:
 - No file outside `plans/` names `okf-scratch`.
 - The local scratch clones are under `/mnt/data/works/scratch`.
 - Without credentials, `curl -sfL` of compass's codeload tarball exits 22 (HTTP 404) and of `tuan-nng/okf`'s exits 0.
+
+**Decided by the user on 2026-10-07:** phase 05 deletes all six scratch repos and their local clones, together with `okf-tools` and `knowledge-hub`, after one `gh auth refresh -h github.com -s delete_repo`.
