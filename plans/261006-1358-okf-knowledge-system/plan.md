@@ -68,7 +68,7 @@ Confirmed with the user:
    - an overview concept explaining how to fill the hub in and run it.
 
    An end user copies the template into their own repo. `compass setup` asks for that hub repo and for a folder to clone it into, defaulting to `~/src/<repo>`; `--hub` and `--hub-dir` skip the prompts. It reuses an existing clone of the same repo, clones it otherwise, and stops before writing anything if the hub isn't readable. It records the hub and its folder in the user's config, installs the pinned `okf`, and installs the skill into each agent's user-level skill folder. Hub work happens in that clone, and the hub commands use it unless given another folder. How compass itself reaches a developer machine is out of scope; `make install` is one way. The same command, with flags instead of prompts, sets up CI and cloud agents. The rejected alternative created the hub during setup, which puts org-admin work in every developer's setup.
-4. **Delete `okf-tools` and `tuan-nng/knowledge-hub`** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For live checks, a scratch hub, `tuan-nng/okf-scratch-hub`, plays the end user's hub. It is created from the template alone, which proves the template works. The rejected alternative archived both repos.
+4. **Delete `okf-tools` and `tuan-nng/knowledge-hub`** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For phase 04's live checks, a scratch hub, `tuan-nng/okf-scratch-hub`, played the end user's hub. It was created from the template alone, which proved the template works. On 2026-10-07 the user decided to delete it: compass owns no hub (decision 3), and the writers in phase 06 need only a local hub folder. The rejected alternative archived both repos.
 5. **okfcli#34: a pinned, patched fork** (`tuan-nng/okf`, public), with the same patch sent upstream. `pins/okf.env` names the release repo with the tag and checksums. The fork stays separate from compass. okfcli keeps its code under `internal/`, so Go doesn't let compass import it, and `compass` installs and calls the pinned `okf` binary instead. We drop the fork once upstream releases a fix. The rejected alternative was date-only `stale_after`, which departs from the spec (design section 4.6).
 6. **Mode order.** Folder mode pilots first (M4), and branch mode joins in M5. The rejected alternative piloted both at once, which would delay the first pilot until the sync job is live.
 7. **No org setting (revised 2026-10-06).** The hub repo is the only thing a user names. `repos.txt` may list any `https://github.com/<owner>/<repo>` URL, so a hub can span accounts. The workflow templates name the compass repo by placeholder. Accepted cost: a reviewed `repos.txt` line can make every developer's assembly fetch any GitHub repo; its bundle is untrusted text either way (Design, Trust boundaries). The same line also makes `compass stamp` and `compass sync` write to that repo, with only the rights of the person who runs them. The rejected alternative, the decision before revision, set `OKF_ORG` in `config.env` or the user config and limited `repos.txt` to that account. It made every user know an org name, and it blocked hubs spanning accounts.
@@ -283,7 +283,7 @@ Run from the compass root:
 
 - `go vet ./... && go test ./...` exits 0.
 - `./test/run-all.sh` exits 0.
-- In a clone of the hub, `compass hub assemble --ci . && compass hub check .` exits 0, for the scratch hub in M2 and the pilot hub after.
+- In a clone of the hub, `compass hub assemble --ci . && compass hub check .` exits 0: for the scratch hub in M2 (done in phase 04) and the pilot hub after.
 - `gh repo view tuan-nng/okf-tools` and `gh repo view tuan-nng/knowledge-hub` both exit non-zero.
 - `compass pilot report --repos pilot.txt --since <start>` prints a value for each of the five metrics, for at least one repo in each mode, and writes the same report into the stats clone.
 - `af plans` reports zero findings.
@@ -377,3 +377,6 @@ Inputs with fixed deadlines:
 - Decision 7: its accepted cost now also covers `stamp` and `sync` writing to any listed repo.
 - Dependencies: phase 04 lists 01–02.
 **Result:** phase 04 completed; evidence in its Result section.
+
+### Session 6 — 2026-10-07 (scratch hub removed)
+**Trigger:** the user decided that compass needs no hub repo of its own, since each team's hub is configured through `compass setup`. **Changed:** decision 4; phase 06 uses a temporary local hub folder made from `templates/hub/` instead of `tuan-nng/okf-scratch-hub`. **Checked:** `stamp.Run` reads only `repos.txt` and `checks.txt` from the hub folder (`internal/stamp/stamp.go:368-377`); `sync-live.sh` already planned its own temporary hub.

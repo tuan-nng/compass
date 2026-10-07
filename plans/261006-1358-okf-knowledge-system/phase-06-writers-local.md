@@ -11,7 +11,7 @@ dependencies: [4]
 
 ## Overview
 
-Outcome: a person with their own GitHub token runs `compass stamp` and `compass sync` against the scratch hub, under the personal account, and both do on GitHub what their recorded-API tests showed (plan decision 13).
+Outcome: a person with their own GitHub token runs `compass stamp` and `compass sync` against a temporary local hub folder made from `templates/hub/`, under the personal account, and both do on GitHub what their recorded-API tests showed (plan decision 13). The writers read only `repos.txt` and `checks.txt` from the hub folder (`internal/stamp/stamp.go` `Run`), so no hub repo on GitHub is needed. Phase 04's `tuan-nng/okf-scratch-hub` is to be deleted (plan decision 4).
 
 **The stamper** writes `verified: process:<actor>` stamps only for concepts whose named workflow job passed on the repo's default-branch head. The evidence job is the `okf` workflow's `bundle-check` job on `okf-scratch-bundle-check`, which runs on pushes to `main`.
 
@@ -36,13 +36,13 @@ Row 2 needs an approval from a human other than the pull request's author, and t
 
 Owns:
 
-- **Two rows on `tuan-nng/okf-scratch-hub`.** The stamper reads only repos named in `repos.txt` (`templates/hub/checks.txt` header), and phase 04's hub lists neither scratch repo used here. So the hub gets a `repos.txt` row for `okf-scratch-bundle-check` (folder) and a `checks.txt` row for its `bundle-check` job and two of its concepts.
-- **`test/sync-live.sh`.** It builds a temporary hub whose `repos.txt` lists only the repo it is given, in branch mode, because `compass sync` has no repo filter and would otherwise act on every branch-mode repo in the scratch hub. For each covered row it sets up the situation, runs `compass sync --hub <temp hub>` once with the caller's token, and checks the end state.
+- **A temporary stamp hub.** A folder outside the compass repo, copied from `templates/hub/`, never pushed. Its `repos.txt` has one row for `okf-scratch-bundle-check` (folder), and its `checks.txt` has one row for that repo's `bundle-check` job and two of its concepts. The stamper reads only repos named in `repos.txt` (`templates/hub/checks.txt` header). The folder is deleted afterwards.
+- **`test/sync-live.sh`.** It builds a temporary hub whose `repos.txt` lists only the repo it is given, in branch mode, because `compass sync` has no repo filter and would otherwise act on every branch-mode repo a hub lists. For each covered row it sets up the situation, runs `compass sync --hub <temp hub>` once with the caller's token, and checks the end state.
 - **The stamper's refusal message (plan decision 13).** When branch protection refuses its push, it says so instead of reporting that the branch moved. Today both answers can arrive as HTTP 422 from the ref update, which the stamper reports as "moved" (`internal/stamp/stamp.go`, the `/git/refs/heads/` PATCH). [INFERENCE] GitHub tells them apart only by the message. First, a throwaway public scratch repo with a ruleset that blocks direct pushes shows the status and message GitHub returns. The repo is deleted afterwards.
 
 ## Verification
 
-- In a clone of `tuan-nng/okf-scratch-hub`, `GITHUB_TOKEN=$(gh auth token) compass stamp --hub .` exits 0. Then, on `okf-scratch-bundle-check`:
+- In the temporary stamp hub, `GITHUB_TOKEN=$(gh auth token) compass stamp --hub .` exits 0. Then, on `okf-scratch-bundle-check`:
   - `git log -1 --format=%ae` shows the token account's commit email;
   - `git show --stat HEAD` lists only the covered concepts;
   - `git rev-parse HEAD~1` equals the commit the job ran on.
