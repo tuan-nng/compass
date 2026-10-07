@@ -71,7 +71,7 @@ Confirmed with the user:
 4. **Delete `okf-tools` and `tuan-nng/knowledge-hub`** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For live checks, a scratch hub, `tuan-nng/okf-scratch-hub`, plays the end user's hub. It is created from the template alone, which proves the template works. The rejected alternative archived both repos.
 5. **okfcli#34: a pinned, patched fork** (`tuan-nng/okf`, public), with the same patch sent upstream. `pins/okf.env` names the release repo with the tag and checksums. The fork stays separate from compass. okfcli keeps its code under `internal/`, so Go doesn't let compass import it, and `compass` installs and calls the pinned `okf` binary instead. We drop the fork once upstream releases a fix. The rejected alternative was date-only `stale_after`, which departs from the spec (design section 4.6).
 6. **Mode order.** Folder mode pilots first (M4), and branch mode joins in M5. The rejected alternative piloted both at once, which would delay the first pilot until the sync job is live.
-7. **No org setting (revised 2026-10-06).** The hub repo is the only thing a user names. `repos.txt` may list any `https://github.com/<owner>/<repo>` URL, so a hub can span accounts. The workflow templates name the compass repo by placeholder. Accepted cost: a reviewed `repos.txt` line can make every developer's assembly fetch any GitHub repo; its bundle is untrusted text either way (Design, Trust boundaries). The rejected alternative, the decision before revision, set `OKF_ORG` in `config.env` or the user config and limited `repos.txt` to that account. It made every user know an org name, and it blocked hubs spanning accounts.
+7. **No org setting (revised 2026-10-06).** The hub repo is the only thing a user names. `repos.txt` may list any `https://github.com/<owner>/<repo>` URL, so a hub can span accounts. The workflow templates name the compass repo by placeholder. Accepted cost: a reviewed `repos.txt` line can make every developer's assembly fetch any GitHub repo; its bundle is untrusted text either way (Design, Trust boundaries). The same line also makes `compass stamp` and `compass sync` write to that repo, with only the rights of the person who runs them. The rejected alternative, the decision before revision, set `OKF_ORG` in `config.env` or the user config and limited `repos.txt` to that account. It made every user know an org name, and it blocked hubs spanning accounts.
 8. **Pilot repos are chosen when phase 08 starts,** after M1–M2 give maintainers a working demo. They should be repos whose contract or schema test runs as a GitHub Actions job on pushes to the default branch (decision 13).
 9. **CI and cloud agents find branch-mode knowledge through the skill plus a pointer line.** `compass setup` runs in every CI and cloud agent environment. Each platform's organisation-level instructions get one line: check `git ls-remote origin okf/main`, and follow the OKF skill if that branch exists. The rejected alternatives:
    - the skill alone, which has no trigger in a fresh clone without `okf/`;
@@ -101,7 +101,7 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
 15. **The hub has no CI, and no repo pipeline triggers it.** Cross-repo checks run where people read: `compass hub assemble`, then `compass hub check`. The agent runs them before it opens a hub pull request, and the reviewer runs them before approving. A hub pull request that waits on a repo change is checked again locally after that change merges, and the skill says so. Accepted cost: nothing reports a broken cross-repo link until someone assembles. Rejected alternatives:
     - hub CI nightly, on manual dispatch and on hub pull requests (the decision before revision). It needs the reader app and Actions in the hub;
     - no Actions anywhere, with the bundle check as a git hook. Hooks don't run for cloud agents, CI agents, web edits or `--no-verify`, so stale or invalid bundles would reach the default branches every reader assembles.
-16. **The only CI entry point is `actions/bundle-check`,** a composite action that builds `compass` from source. Callers pin it by commit SHA. It sets up Go with a SHA-pinned `actions/setup-go`, with its build cache on, and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. Rejected alternatives:
+16. **The only CI entry point is `actions/bundle-check`,** a composite action that builds `compass` from source. Callers pin it by commit SHA. It sets up Go with a SHA-pinned `actions/setup-go` and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. The setup-go cache is off (changed 2026-10-07, phase 04): setup-go keys its cache on a `go.sum` under `GITHUB_WORKSPACE` and ignores files outside it, and compass's `go.sum` sits in the action's checkout, outside the caller's workspace. The uncached build takes about 19 s, under the 60 s target. Rejected alternatives:
     - release binaries: faster, but a second pin and a release pipeline;
     - reusable workflows: a called workflow runs with its caller's token, which can't check out a private compass to build it.
 17. **Neutral module path.** The Go module is named `compass`, so no account name appears in the code (decision 7). People build from a clone with `make install`. The rejected alternative, `github.com/<org>/compass`, hard-codes today's account into every import.
@@ -229,7 +229,7 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
 | 01 | M1 | [phase-01-cli-core.md](phase-01-cli-core.md) | `compass` builds from a clone and replaces every script except the writer jobs; the moved suites pass against it | completed |
 | 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | completed |
 | 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | in-progress |
-| 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | pending |
+| 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | completed |
 | 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools` and `tuan-nng/knowledge-hub` are deleted, and the docs describe compass, the end-user hub and local-first operation | pending |
 | 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` stamps a scratch repo and names a protection refusal; `compass sync` carries out every state-table row except the merge on a scratch branch-mode repo | pending |
 | 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and the scratch repos stay green on its action | pending |
@@ -241,7 +241,7 @@ Dependencies:
 
 - 02 needs the module and shared packages from 01, so 01 and 02 overlap once those land.
 - 03 needs 01.
-- 04 needs 01–03. Phase 03's one open item, the manual Cursor run, doesn't block it; that run uses the skill as phase 04 leaves it.
+- 04 needs 01, 02 and phase 03's code. Phase 03's one open item, the manual Cursor run, doesn't block it; that run uses the skill as phase 04 leaves it. Phase 04's frontmatter therefore lists only 01 and 02, so it could close while 03 waits.
 - 05 needs 04.
 - 06 needs 04.
 - 07 needs 05.
@@ -292,7 +292,7 @@ Run from the compass root:
 
 - **The rewrite drops a behavior.** Signal: a moved end-to-end case fails, or a live run differs from its recorded result. Response: fix in place. The old scripts stay readable in the local `okf-tools` clone until phase 05.
 - **The validator port disagrees with okf-skills.** Signal: the differential test reports a difference. Response: fix the port. If the YAML parsing differences can't be closed, return to planning on decision 19.
-- **Building Go in the bundle-check job is slow.** Signal: the build step goes over 60 s. Response: rely on `setup-go`'s cache. If that isn't enough, return to planning on decision 16.
+- **Building Go in the bundle-check job is slow.** Signal: the build step goes over 60 s (19 s uncached on 2026-10-07). Response: cache `GOCACHE` with `actions/cache`, keyed on a hash of the action's own Go sources computed in a run step. If that isn't enough, return to planning on decision 16.
 - **Pushing compass exposes local-only files.** The harness folders and `CLAUDE.local.md` are ignored only through this clone's `.git/info/exclude`. Signal: before a push, `git ls-files` lists harness folders or `CLAUDE.local.md`. Response: stop and ask the user.
 - **Publishing compass exposes something private.** Phase 07 makes the whole history public. Signal: a secret-scan finding, or a private repo or person named in history. Response: stop and ask the user. Publishing then needs a history rewrite or a fresh repo.
 - **The account can't delete repos.** The `gh` token lacks `delete_repo`. Signal: HTTP 403. Response: the user runs `gh auth refresh -s delete_repo`, or deletes the repos in the GitHub UI.
@@ -370,3 +370,10 @@ Inputs with fixed deadlines:
 - Failed: phase 06 stamps `okf-scratch-bundle-check`, which phase 04's scratch hub doesn't list (phase-04:19; `templates/hub/checks.txt:5`), and `compass sync` has no repo filter; fixed in phase 06 (hub row, one-repo temp hub, 422 status shared with "moved" at `internal/stamp/stamp.go:329-335`)
 - Decided: phase 04 starts while phase 03 waits on the manual Cursor run — Dependencies
 - Re-verified unchanged: caller counts (`config.Org` 5, `ParseRepos` 2, 16 `OKF_ORG`/`--org` files), `internal/app`'s one caller, no `actions/`, both hub workflows, five scratch `okf.yml` placements and the `bundle-check` job id, no `okf-scratch-hub`, Actions access `none`, `tuan-nng/okf` public, local `okf-tools` at `9dcdd60`, state-table rows (research:348-356), design section 9 item 5, phase 10's grep target (design:597), `actionlint templates/*.yml` exits 0, `af plans` 0 findings.
+
+### Session 5 — 2026-10-07 (phase 04 cooked)
+**Trigger:** `/af:cook` on phase 04. **Changed:**
+- Decision 16 and Risks: the setup-go cache is off, because setup-go ignores a `go.sum` outside `GITHUB_WORKSPACE` (journal `2026-10-07-setup-go-cache-outside-workspace.md`).
+- Decision 7: its accepted cost now also covers `stamp` and `sync` writing to any listed repo.
+- Dependencies: phase 04 lists 01–02.
+**Result:** phase 04 completed; evidence in its Result section.
