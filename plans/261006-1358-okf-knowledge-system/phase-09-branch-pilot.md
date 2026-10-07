@@ -11,7 +11,7 @@ dependencies: [8]
 
 ## Overview
 
-Outcome: one real branch-mode repo, named by its maintainers when phase 08 picks the pilot repos, follows the full loop in design section 4.9. The agents that CI and cloud platforms run on it also find its knowledge (plan decision 9). Its first knowledge pull request proves the sync job's merge row live, the one row phase 06 could not cover. Its pilot window starts.
+Outcome: one real branch-mode repo, named by its maintainers when phase 08 picks the pilot repos, follows the full loop in design section 4.9. The agents that CI and cloud platforms run on it also find its knowledge (plan decision 9). Its first knowledge pull request is the sync job's first live run and proves the merge row live. The other state-table rows are proven only on recorded GitHub responses (phases 02 and 06, plan decision 22), and the pilot meets them as they occur. Its pilot window starts.
 
 Owns:
 

@@ -3,7 +3,7 @@ title: "OKF knowledge system: compass CLI, hub template and pilot"
 description: "People clone compass, build one compass binary, connect it to their own knowledge hub, and pilot the OKF knowledge system on real repos, folder mode first, then branch mode."
 status: in-progress
 priority: P1
-effort: 17d build + 4-week pilot per mode
+effort: 15.5d build + 4-week pilot per mode
 branch: master
 tags: [okf, knowledge, agents, tooling, go, cli]
 created: 2026-10-06
@@ -22,8 +22,8 @@ The work is grouped into five milestones. Each one leaves something usable behin
 | Milestone | What works when it closes |
 |---|---|
 | M1 One tool | `compass` builds from a clone, replaces every script, and passes every test the scripts passed. |
-| M2 Live on GitHub | `compass setup` connects a machine to a hub. Compass's bundle-check action gates the scratch repos' pull requests, and a hub made from the template assembles and checks on a developer machine. `okf-tools` and `knowledge-hub` are gone. |
-| M3 Writers live | `compass stamp` and `compass sync`, run from a developer machine, write `process:` stamps and carry out the sync rules on the scratch repos. Compass is public, so any account's repos can use its action. |
+| M2 Live on GitHub | `compass setup` connects a machine to a hub. Compass's bundle-check action gates the scratch repos' pull requests, and a hub made from the template assembles and checks on a developer machine. `okf-tools`, `knowledge-hub` and the scratch repos are gone. |
+| M3 Writers ready | `compass stamp` names a refused push, and both writers pass their checks on a hub folder copied from the template, with recorded GitHub responses (decision 22). Compass is public, so any account's repos can use its action. |
 | M4 Folder-mode pilot | 1–2 real folder-mode repos are live, and pilot metrics are collected. |
 | M5 Branch mode and read-out | A branch-mode repo is live, and the read-out decides whether to roll out further. |
 
@@ -68,7 +68,7 @@ Confirmed with the user:
    - an overview concept explaining how to fill the hub in and run it.
 
    An end user copies the template into their own repo. `compass setup` asks for that hub repo and for a folder to clone it into, defaulting to `~/src/<repo>`; `--hub` and `--hub-dir` skip the prompts. It reuses an existing clone of the same repo, clones it otherwise, and stops before writing anything if the hub isn't readable. It records the hub and its folder in the user's config, installs the pinned `okf`, and installs the skill into each agent's user-level skill folder. Hub work happens in that clone, and the hub commands use it unless given another folder. How compass itself reaches a developer machine is out of scope; `make install` is one way. The same command, with flags instead of prompts, sets up CI and cloud agents. The rejected alternative created the hub during setup, which puts org-admin work in every developer's setup.
-4. **Delete `okf-tools` and `tuan-nng/knowledge-hub`** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For phase 04's live checks, a scratch hub, `tuan-nng/okf-scratch-hub`, played the end user's hub. It was created from the template alone, which proved the template works. On 2026-10-07 the user decided to delete it: compass owns no hub (decision 3), and the writers in phase 06 need only a local hub folder. The rejected alternative archived both repos.
+4. **Delete `okf-tools`, `tuan-nng/knowledge-hub` and the scratch repos** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For phase 04's live checks, five scratch repos and a scratch hub, `tuan-nng/okf-scratch-hub`, played the end user's repos and hub. The hub was created from the template alone, which proved the template works. After phase 04 nothing uses them (decision 22), and compass owns no hub (decision 3), so phase 05 deletes all six. The rejected alternative archived the repos.
 5. **okfcli#34: a pinned, patched fork** (`tuan-nng/okf`, public), with the same patch sent upstream. `pins/okf.env` names the release repo with the tag and checksums. The fork stays separate from compass. okfcli keeps its code under `internal/`, so Go doesn't let compass import it, and `compass` installs and calls the pinned `okf` binary instead. We drop the fork once upstream releases a fix. The rejected alternative was date-only `stale_after`, which departs from the spec (design section 4.6).
 6. **Mode order.** Folder mode pilots first (M4), and branch mode joins in M5. The rejected alternative piloted both at once, which would delay the first pilot until the sync job is live.
 7. **No org setting (revised 2026-10-06).** The hub repo is the only thing a user names. `repos.txt` may list any `https://github.com/<owner>/<repo>` URL, so a hub can span accounts. The workflow templates name the compass repo by placeholder. Accepted cost: a reviewed `repos.txt` line can make every developer's assembly fetch any GitHub repo; its bundle is untrusted text either way (Design, Trust boundaries). The same line also makes `compass stamp` and `compass sync` write to that repo, with only the rights of the person who runs them. The rejected alternative, the decision before revision, set `OKF_ORG` in `config.env` or the user config and limited `repos.txt` to that account. It made every user know an org name, and it blocked hubs spanning accounts.
@@ -114,6 +114,7 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
     - moving compass to the pilot repos' account, which ties compass to one org;
     - building compass in each workflow with a token secret in every pilot repo;
     - piloting only on repos under `tuan-nng`.
+22. **Tests need no extra GitHub repo (2026-10-07).** Every check after phase 04 runs on folders: local bare remotes, hub folders copied from `templates/hub/`, and recorded GitHub API responses served through `ghfake` (`--api-url` for the writers). GitHub-side behavior is next exercised on the pilot repos, which exist anyway: the first stamp in phase 08, the first sync merge in phase 09, and the first public run of the action in phase 08. Accepted cost: a GitHub behavior the recorded responses miss first shows up during the pilot, on a real repo (Risks). Rejected alternative: scratch repos under the personal account, as in phases 02–04 and the plan before this revision. They prove GitHub behavior before the pilot, but they are repos to create, keep in step and delete, and a throwaway protected repo was needed only to learn one message text.
 
 ## Design
 
@@ -230,9 +231,9 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
 | 02 | M1 | [phase-02-writer-jobs.md](phase-02-writer-jobs.md) | `compass stamp` and `compass sync` pass the recorded-API tests the Python jobs pass | completed |
 | 03 | M2 | [phase-03-setup-skill-template.md](phase-03-setup-skill-template.md) | `compass setup` installs `okf` and the skill against the user's hub; the skill passes its scenarios; the hub template ships | in-progress |
 | 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | completed |
-| 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools` and `tuan-nng/knowledge-hub` are deleted, and the docs describe compass, the end-user hub and local-first operation | pending |
-| 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` stamps a scratch repo and names a protection refusal; `compass sync` carries out every state-table row except the merge on a scratch branch-mode repo | pending |
-| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and the scratch repos stay green on its action | pending |
+| 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools`, `tuan-nng/knowledge-hub` and the six scratch repos are deleted, and the docs describe compass, the end-user hub and local-first operation | pending |
+| 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` names a refused push instead of "moved"; both writers pass on a hub folder copied from the template, with recorded GitHub responses | pending |
+| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and its action's code downloads without credentials | pending |
 | 08 | M4 | [phase-08-folder-pilot.md](phase-08-folder-pilot.md) | 1–2 folder-mode repos are live, and `compass pilot report` measures them | pending |
 | 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | One branch-mode repo is live, and CI and cloud agents find its knowledge | pending |
 | 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics and a roll-out decision is committed to the stats repo | pending |
@@ -271,10 +272,10 @@ Scope: ten phases. Each closes one milestone step with its own exit check. M1 re
 1. A fresh compass clone builds `compass` with `make install`, with Go, make and git as the only prerequisites. `compass setup` against a readable hub leaves a working `okf`, the skill in each detected agent folder, a clone of the hub (an existing clone is reused), and a config. Against an unreadable hub it writes nothing.
 2. Every case in the moved suites passes against `compass`, and both recorded-API test sets pass in Go.
 3. A hub made only by copying `templates/hub/` assembles on a developer machine with `compass hub assemble`. Assembly fails on an empty bundle and a symlink, and `compass hub check` fails on a broken cross-repo link.
-4. `tuan-nng/okf-tools` and `tuan-nng/knowledge-hub` no longer exist, and nothing live refers to them.
+4. `tuan-nng/okf-tools`, `tuan-nng/knowledge-hub` and the `okf-scratch-*` repos no longer exist, and nothing live refers to them.
 5. In a folder-mode pilot repo, an agent with the skill reads with trust rules and records 1–3 knowledge files in a code pull request. The bundle check passes, and a reviewer's `verified` line makes `okf show` report `human-reviewed`.
 6. The stamper stamps only concepts in `checks.txt`, only after the named check passed, and makes no commit when stamps are current.
-7. In a branch-mode repo, the `okf/main` workflow checks knowledge pull requests, and `compass sync`, run by a person, carries out each state-table row.
+7. In a branch-mode repo, the `okf/main` workflow checks knowledge pull requests. `compass sync`, run by a person, carries out each state-table row on recorded GitHub responses, and merges the pilot's first approved, green knowledge pull request live.
 8. The read-out reports all five metrics for at least one repo per mode, over at least four weeks, and states a roll-out decision.
 
 ## Verification
@@ -304,6 +305,7 @@ Run from the compass root:
 - **Local assembly is slow over GitHub.** Signal: a cold `compass hub assemble` of the pilot hub takes over 5 minutes. Response: use shallow partial clones or parallel fetches.
 - **The check never runs where the stamper looks.** Signal: a `checks.txt` row logs `no check run on head` for a week. Response: change that repo's triggers with its maintainers, or remove the row.
 - **CI and cloud agents miss branch-mode knowledge.** Signal: phase 03's fresh-clone scenario, or a phase 09 agent run, never runs branch setup. Response: return to planning for how branch-mode repos announce themselves.
+- **Folder tests miss a GitHub behavior (decision 22).** Signal: a writer's first live run on a pilot repo fails, or does something its recorded-response tests don't show. Response: record the real response as a new fixture, fix the writer, and rerun on the pilot repo. Neither writer runs on a schedule, so nothing repeats the failure until a person reruns it.
 
 ## Unresolved Questions
 
@@ -380,3 +382,23 @@ Inputs with fixed deadlines:
 
 ### Session 6 — 2026-10-07 (scratch hub removed)
 **Trigger:** the user decided that compass needs no hub repo of its own, since each team's hub is configured through `compass setup`. **Changed:** decision 4; phase 06 uses a temporary local hub folder made from `templates/hub/` instead of `tuan-nng/okf-scratch-hub`. **Checked:** `stamp.Run` reads only `repos.txt` and `checks.txt` from the hub folder (`internal/stamp/stamp.go:368-377`); `sync-live.sh` already planned its own temporary hub.
+
+### Session 7 — 2026-10-07 (folder-only tests)
+**Trigger:** `/af:plan`. The user asked that no test need an extra repo, and that tests run on folders. **Changed:**
+- New decision 22.
+- Decision 4: phase 05 deletes all six scratch repos.
+- M3 and acceptance criteria 4 and 7.
+- Phase 06 is rewritten: the stamper's refusal is told apart by re-reading the branch head, not by GitHub's message text, and both writers are tested on a template hub folder. `test/sync-live.sh` and the throwaway protected repo are dropped. Effort goes from 2d to 0.5d, and plan effort from 17d to 15.5d.
+- Phase 07 checks an anonymous download of the action instead of a scratch run.
+- Phase 08 takes the live stamp-commit checks that phase 06 had.
+- Phase 09 states which sync rows are proven live.
+- A new Risks entry.
+
+**Checked on 2026-10-07:**
+- The writers take `--api-url` (`internal/stamp/stamp.go:416`; `internal/github/github.go` `New`).
+- `stamp_test.go` holds 22 tests and `sync_test.go` 25, with Row1–Row7 tests for every state-table row.
+- `ref-not-fast-forward.json` and `ref-main.json` exist under `internal/stamp/testdata/fixtures/`.
+- The ref update treats 409 and 422 as "moved" (`internal/stamp/stamp.go:332-338`).
+- No file outside `plans/` names `okf-scratch`.
+- The local scratch clones are under `/mnt/data/works/scratch`.
+- Without credentials, `curl -sfL` of compass's codeload tarball exits 22 (HTTP 404) and of `tuan-nng/okf`'s exits 0.

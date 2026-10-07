@@ -28,4 +28,4 @@ Owns:
 
 - The chosen secret scanner, run over every commit, reports no findings, and the command and tool version are recorded here.
 - `gh repo view tuan-nng/compass --json visibility -q .visibility` prints `PUBLIC`.
-- On `okf-scratch-bundle-check`, a new push run of `okf` concludes `success` with the action still pinned to the same SHA.
+- With no credentials, the action's code downloads: `curl -sfL -o /dev/null https://codeload.github.com/tuan-nng/compass/tar.gz/$(git rev-parse origin/master)` exits 0. That is the fetch a runner in another account makes. On 2026-10-07, while compass was private, it exited 22 (HTTP 404), and the same command against the public `tuan-nng/okf` exited 0. The first workflow run on the action happens on a pilot repo (phase 08's first verification check), not on a scratch repo (plan decision 22).

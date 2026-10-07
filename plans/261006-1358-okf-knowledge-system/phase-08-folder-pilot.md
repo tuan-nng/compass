@@ -38,6 +38,12 @@ Owns:
 - For each pilot repo, `gh run list -R <owner>/<repo> -w okf -L 1 --json conclusion -q '.[0].conclusion'` prints `success`.
 - In a clone of the pilot hub, with the pilot repos in `repos.txt`, `compass hub assemble --ci . && compass hub check .` exits 0.
 - The first real task with the skill gives a merged pull request that changes 1–3 concepts. After a reviewer's `verified` line merges, `okf show okf <id> | jq -r .concept.trust_tier` prints `human-reviewed`.
-- Where a `checks.txt` row exists, the writer owner's next `compass stamp` run adds a `process:` entry to a covered concept.
+- Where a `checks.txt` row exists, the writer owner's next `compass stamp` run adds a `process:` entry to a covered concept. This is the stamper's first live run (plan decision 22), so on that repo:
+  - `git log -1 --format=%ae` shows the writer owner's commit email;
+  - `git show --stat HEAD` lists only covered concepts;
+  - `git rev-parse HEAD~1` equals the commit the check job ran on;
+  - a second `compass stamp` run makes no commit.
+
+  If the push is refused, the log names the refusal, not "moved" (phase 06), and the maintainers decide on the bypass (plan Risks).
 - `go test ./...` covers each metric against recorded GitHub responses with known counts.
 - `compass pilot report --repos pilot.txt --since <start>` prints one line per metric per repo, and the same report appears as a new file in the stats clone.
