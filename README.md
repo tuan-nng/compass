@@ -1,15 +1,21 @@
 # compass
 
 compass is one command-line tool, `compass`, for keeping what coding agents
-learn about a codebase next to the code. Each repo keeps its knowledge as an
+learn about a codebase where every agent can find it. All knowledge lives in
+one hub repo, as
 [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md)
-bundle, a folder of markdown files with frontmatter. Agents read the bundle
-before a task and add to it in the same pull request as the code. A hub repo
-lists the repos and puts their bundles together, so agents can answer
-questions that span repos.
+concepts: markdown files with frontmatter. Each listed repo's knowledge sits
+under `repos/<id>/`, next to the concepts that span repos, so agents can
+answer questions that cross repos. The code repos carry nothing.
 
-There is no server and no hub CI. Everything runs on people's machines with
-their own GitHub credentials. The only CI job is a bundle check in each repo.
+When an agent works on branch `A` of repo `X`, it writes knowledge on hub
+branch `X/A` and opens a hub pull request that names the code pull request.
+A person approves it, and once the code pull request merges, `compass sync`
+checks the result and merges the hub pull request. Adding a repo is one line
+in the hub's `repos.txt`.
+
+There is no server and no CI. Everything runs on people's machines with
+their own GitHub credentials.
 
 **Status:** compass is built and tested. The pilot on real repos has not
 started. The two commands that write to GitHub, `compass stamp` and
@@ -33,7 +39,7 @@ if `GOBIN` is unset. `compass setup` asks for your hub repo. It then installs
 the pinned `okf` CLI, clones the hub, and gives the OKF skill to your agents.
 
 [docs/install.md](docs/install.md) covers prerequisites, making a hub, adding
-repos, CI and cloud agents, and removal.
+repos, protecting the hub, CI and cloud agents, and removal.
 
 ## Commands
 
@@ -41,29 +47,33 @@ repos, CI and cloud agents, and removal.
 |---|---|
 | `compass setup` | Connects this machine to your hub: installs `okf`, records the hub clone, installs the skill |
 | `compass okf install` | Installs the pinned `okf` binary, refusing a checksum mismatch |
-| `compass validate` | Runs the strict OKF validator on a bundle |
-| `compass bundle check` | Checks a bundle the way repo CI does |
-| `compass hub assemble` | Fetches every bundle in the hub's `repos.txt` into `repos/` |
-| `compass hub check` | Checks an assembled hub, including cross-repo links |
-| `compass branch setup` | Sets up a branch-mode repo's `okf/` in a clone |
-| `compass stamp` | Writes `process:` stamps for the checks in `checks.txt` |
-| `compass sync` | Merges approved branch-mode knowledge pull requests after their code merges |
+| `compass validate` | Runs the strict OKF validator on a folder of concepts |
+| `compass hub branch` | Prints the path of a hub worktree on `<id>/<branch>` for the current code branch, creating it on the first run; `--prune` removes finished ones |
+| `compass hub check` | Checks a hub: strict validator, cross-repo links, per-repo concept counts, current `index.md` files, no symlinks |
+| `compass stamp` | Writes `process:` stamps for the checks in `checks.txt` on the hub's default branch |
+| `compass sync` | Merges approved hub pull requests after their code pull requests merge, and cleans up hub branches |
 | `compass version` | Prints the commit the build came from |
 
 Run `compass <command> --help` for each command's flags.
 
-## Two ways a repo keeps its knowledge
+## One hub, one access group
 
-- **Folder mode:** the bundle is `okf/` on the default branch. It is reviewed
-  in the code pull request.
-- **Branch mode:** for maintainers who want no knowledge files on their code
-  branches. The bundle lives on an `okf/main` branch. Each code branch gets
-  its own knowledge branch, reviewed in a separate pull request.
+Anyone who can read the hub reads every listed repo's knowledge. A team that
+needs to keep some repos' knowledge apart runs one hub per access group.
 
-The [design doc](docs/design/okf-knowledge-system-ux.md) walks through both
-modes as people and agents use them. The
-[research report](docs/research/okf-knowledge-system.md) explains why the
-system works this way.
+Every developer whose agent writes knowledge needs push access to the hub,
+for its `<id>/<branch>` branches. So the review before each merge holds only
+with a ruleset on the hub's default branch that blocks direct pushes and
+requires pull requests, with code-owner review of the control files.
+Rulesets need a public hub or a paid GitHub plan. Only the person who runs
+`compass stamp` needs a bypass, on the hub alone.
+
+The [design doc](docs/design/okf-knowledge-system-ux.md) walks through how
+people and agents use the system. The
+[research report](docs/research/okf-knowledge-system.md) explains why it
+works this way, and the
+[hub-only plan](plans/261021-1007-hub-branch-knowledge/plan.md) records the
+move from per-repo bundles to the hub.
 
 ## What is in this repo
 
@@ -72,9 +82,8 @@ system works this way.
 | `cmd/compass/`, `internal/` | The Go source |
 | `skill/okf/SKILL.md` | The agent skill, built into the binary |
 | `pins/okf.env` | The pinned `okf` release and its checksums, built into the binary |
-| `actions/bundle-check/` | The GitHub Action that repo CI runs |
 | `templates/hub/` | The template for a new hub repo |
-| `templates/*.yml`, `templates/*-pointer.md`, `templates/hooks/` | Repo workflows, agent instruction lines, and hook-manager snippets |
+| `templates/user-pointer.md` | The one agent instruction line that sends agents to the hub and the skill |
 | `testdata/`, `test/` | Test data and end-to-end test suites |
 | `docs/` | Install guide, design doc, research report |
 | `plans/` | Build plans and their records |

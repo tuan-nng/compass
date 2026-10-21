@@ -13,7 +13,7 @@ dependencies: [4]
 
 Outcome: `compass stamp` tells a refused push apart from a branch that moved (plan decision 13), and both writers are proven against a hub folder copied from `templates/hub/`. Every check runs on folders and recorded GitHub responses, with no GitHub repo (plan decision 22).
 
-The writers read only `repos.txt` and `checks.txt` from the hub folder (`internal/stamp/stamp.go` `Run`). Every other input comes from the GitHub API, which the Go tests already serve from recorded responses through `ghfake` (22 stamper tests and 25 sync tests from phase 02, covering all seven state-table rows). So this phase adds no live run. The first live stamp and sync runs happen on the pilot repos: phase 08 checks the stamp commit, and phase 09 the sync merge.
+The writers read only `repos.txt` and `checks.txt` from the hub folder (`internal/stamp/stamp.go` `Run`). Every other input comes from the GitHub API, which the Go tests already serve from recorded responses through `ghfake` (22 stamper tests and 25 sync tests from phase 02, covering all seven state-table rows). So this phase adds no live run. The first live stamp and sync runs happen on the pilot repos: phase 08 checks the stamp commit, and phase 09 the sync merge. Since plan decision 23 (2026-10-21), both happen in the hub-only pilot, phase 08.
 
 Owns:
 

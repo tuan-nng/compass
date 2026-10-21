@@ -5,6 +5,14 @@ into compass as one binary, `compass`, and tested; the pilot on real repos has
 not started.
 How the system is used day to day: [interaction and UX design](../design/okf-knowledge-system-ux.md).
 
+**Note (2026-10-21):** compass no longer keeps a bundle in each repo. All
+knowledge now lives in the hub, under `repos/<id>/` for each repo, and repo
+X's branch A pairs with hub branch `X/A`. Folder mode, branch mode, hub
+assembly and the per-repo bundle check are removed. The design is in
+[plans/261021-1007-hub-branch-knowledge/plan.md](../../plans/261021-1007-hub-branch-knowledge/plan.md),
+and section 7 records the switch. The rest of this report is the record of
+the earlier recommendation.
+
 ## Recommendation
 
 Store knowledge as plain [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md)
@@ -253,6 +261,14 @@ was rejected: okfcli read 0 concepts through it and still reported
 
 ## 5. Proposed conventions
 
+**Note (2026-10-21):** these conventions are superseded. The layout is now
+one hub, with each repo's concepts under `repos/<id>/` and a hub branch
+`<id>/<b>` for each code branch `<b>`; branch mode, assembly and the
+`okf/` folder are gone. See
+[plans/261021-1007-hub-branch-knowledge/plan.md](../../plans/261021-1007-hub-branch-knowledge/plan.md).
+The concept types, link rules within a repo's folder, and stamps below still
+apply.
+
 ### Layout
 
 Each repo's bundle lives in one of two places, chosen per repo:
@@ -485,9 +501,18 @@ and `okf validate`.
 
 ## 7. Alternatives considered
 
+**Chosen on 2026-10-21: one central knowledge repo with no per-repo
+bundles.** Each repo's knowledge moves into the hub under `repos/<id>/`, and
+knowledge for code branch `<b>` of repo `<id>` is written on hub branch
+`<id>/<b>` and reviewed in a hub pull request linked to the code one. Adding
+a repo is one `repos.txt` line, and cross-repo links need no assembly.
+[plans/261021-1007-hub-branch-knowledge/plan.md](../../plans/261021-1007-hub-branch-knowledge/plan.md)
+has the design. The table and the paragraphs after it otherwise record the
+earlier recommendation.
+
 | Option | Why not chosen now | When it would win |
 |---|---|---|
-| One central knowledge repo with no per-repo bundles | Knowledge could no longer change next to the code, in the same or a paired pull request. Branch mode already serves maintainers who want no knowledge files on their code branches. | If maintainers refuse even `okf/…` branches in their repo, or the assembly step proves costly or stale in practice; links then need no assembly |
+| Per-repo bundles, in folder mode (`okf/` on the code branches) or branch mode (`okf/…` branches of the code repo) | Every repo needs its own setup: a mode, a bundle, a CI workflow, a pointer line, hooks in branch mode, and a ruleset bypass. Every reader must assemble the hub before a cross-repo query. | If knowledge must be reviewed in the same pull request as its code, or if teams cannot share one hub because each repo needs its own read access |
 | One shared `okf` branch in each repo, not paired with code branches | Knowledge for unmerged work would land on the trunk before its code, or wait until after the merge | If the local hooks prove unworkable |
 | A git-ignored `okf/` folder, or a symlink into a hub checkout | An ignored folder is never shared. okfcli read 0 concepts through a symlink and still reported `"valid": true` ([evidence/branch-mode.md](okf-knowledge-system/evidence/branch-mode.md)). | Never |
 | okf-mcp federation (`okf.project.yaml`, `okf://` typed relations) | Its cross-bundle links are not standard OKF; cold CLI search is 2.9 s; it writes only through MCP; it rejects datetime `stale_after` | If an MCP server becomes acceptable and links between bundles without a hub are needed |

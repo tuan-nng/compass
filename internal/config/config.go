@@ -113,11 +113,11 @@ func Token(name string, getenv func(string) string) (string, error) {
 	return t, nil
 }
 
-// Repo is one repos.txt row.
+// Repo is one repos.txt row: the id names the hub folder repos/<id>/ and
+// prefixes the repo's hub branches <id>/<b>.
 type Repo struct {
 	Name  string
 	URL   string
-	Mode  string // "folder" or "branch"
 	Owner string
 	Repo  string
 }
@@ -139,13 +139,9 @@ type line struct {
 	text string
 }
 
-// contentLines returns the non-blank, non-comment lines of path, numbered as
+// contentLines returns the non-blank, non-comment lines of raw, numbered as
 // Python's universal-newline read plus str.splitlines numbers them.
-func contentLines(path string) ([]line, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, errorf("cannot read %s: %v", path, err)
-	}
+func contentLines(raw []byte) []line {
 	text := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n")
 	var out []line
 	n, start := 0, 0
@@ -165,7 +161,7 @@ func contentLines(path string) ([]line, error) {
 	if start < len(text) {
 		emit(len(text))
 	}
-	return out, nil
+	return out
 }
 
 // isLineBreak reports whether str.splitlines ends a line at r (after \r and
@@ -183,36 +179,51 @@ func pyIsSpace(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x
 
 var repoNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// ParseRepos reads repos.txt: "<name> <git URL> <folder|branch>" per line.
-// Every URL must be https://github.com/<owner>/<repo>, optionally with .git,
-// for any owner (plan decision 7).
-func ParseRepos(path string) (*Repos, error) {
-	lines, err := contentLines(path)
-	if err != nil {
-		return nil, err
+// badID reports why id can't name a repos.txt row, or "" when it can. Beyond
+// the character rule, an id is a single git ref component, since hub branches
+// are <id>/<b>: no leading "." or "-", no "..", no ".lock" suffix.
+func badID(id string) string {
+	switch {
+	case !repoNameRe.MatchString(id):
+		return "use letters, digits, \".\", \"_\" and \"-\""
+	case strings.HasPrefix(id, "."), strings.HasPrefix(id, "-"):
+		return "it must not start with \".\" or \"-\""
+	case strings.Contains(id, ".."):
+		return "it must not contain \"..\""
+	case strings.HasSuffix(id, ".lock"):
+		return "it must not end with \".lock\""
 	}
+	return ""
+}
+
+// ParseRepos reads repos.txt text: "<id> <URL>" per line. Every URL must be
+// https://github.com/<owner>/<repo>, optionally with .git, for any owner.
+// Ids that differ only in case, and two rows for one owner/repo, are refused.
+func ParseRepos(data []byte) (*Repos, error) {
 	rs := &Repos{ByName: map[string]*Repo{}}
-	for _, l := range lines {
+	ids, full := map[string]string{}, map[string]string{}
+	for _, l := range contentLines(data) {
 		parts := strings.Fields(l.text)
 		where := fmt.Sprintf("repos.txt:%d: %s", l.n, l.text)
-		if len(parts) != 3 {
-			return nil, errorf("%s: expected <name> <git URL> <folder|branch>", where)
+		if len(parts) != 2 {
+			return nil, errorf("%s: expected <id> <URL>", where)
 		}
-		name, u, mode := parts[0], parts[1], parts[2]
-		if !repoNameRe.MatchString(name) || name == "." || name == ".." {
-			return nil, errorf("%s: bad repo name %q", where, name)
+		name, u := parts[0], parts[1]
+		if why := badID(name); why != "" {
+			return nil, errorf("%s: bad repo id %q: %s", where, name, why)
 		}
 		owner, repo, ok := ParseRepoURL(u)
 		if !ok {
 			return nil, errorf("%s: URL must be https://github.com/<owner>/<repo>", where)
 		}
-		if mode != "folder" && mode != "branch" {
-			return nil, errorf("%s: mode must be folder or branch", where)
+		if prev, dup := ids[strings.ToLower(name)]; dup {
+			return nil, errorf("%s: duplicate repo id %s (already %s)", where, name, prev)
 		}
-		if _, dup := rs.ByName[name]; dup {
-			return nil, errorf("%s: duplicate repo name %s", where, name)
+		r := &Repo{Name: name, URL: u, Owner: owner, Repo: repo}
+		if prev, dup := full[strings.ToLower(r.FullName())]; dup {
+			return nil, errorf("%s: %s is already listed as %s", where, r.FullName(), prev)
 		}
-		r := &Repo{Name: name, URL: u, Mode: mode, Owner: owner, Repo: repo}
+		ids[strings.ToLower(name)], full[strings.ToLower(r.FullName())] = name, name
 		rs.List = append(rs.List, r)
 		rs.ByName[name] = r
 	}
@@ -239,15 +250,11 @@ var (
 	conceptIDRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$`)
 )
 
-// ParseChecks reads checks.txt rows, split shell-style:
+// ParseChecks reads checks.txt text, rows split shell-style:
 // "<repo-name> <workflow-file> <job-name> <process-actor> <concept-id>...".
-func ParseChecks(path string, repos *Repos) ([]*CheckRow, error) {
-	lines, err := contentLines(path)
-	if err != nil {
-		return nil, err
-	}
+func ParseChecks(data []byte, repos *Repos) ([]*CheckRow, error) {
 	var rows []*CheckRow
-	for _, l := range lines {
+	for _, l := range contentLines(data) {
 		where := fmt.Sprintf("checks.txt:%d: %s", l.n, l.text)
 		parts, err := SplitShell(l.text)
 		if err != nil {

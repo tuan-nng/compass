@@ -39,14 +39,27 @@ var (
 	urlScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://`)
 )
 
-// report collects findings as "<rel>: <message>" strings.
+// report collects findings as "<rel>: <message>" strings, and as pairs in
+// errFound and warnFound, in the same order.
 type report struct {
 	errors, warnings        []string
+	errFound, warnFound     []Finding
 	concepts, indexes, logs int
 }
 
-func (r *report) err(rel, msg string)  { r.errors = append(r.errors, rel+": "+msg) }
-func (r *report) warn(rel, msg string) { r.warnings = append(r.warnings, rel+": "+msg) }
+// Finding is one validator error or warning: the bundle-relative path it
+// concerns and its message.
+type Finding struct{ Path, Message string }
+
+func (r *report) err(rel, msg string) {
+	r.errors = append(r.errors, rel+": "+msg)
+	r.errFound = append(r.errFound, Finding{rel, msg})
+}
+
+func (r *report) warn(rel, msg string) {
+	r.warnings = append(r.warnings, rel+": "+msg)
+	r.warnFound = append(r.warnFound, Finding{rel, msg})
+}
 
 // splitFrontmatter returns the raw YAML between a leading `---` line and the
 // next `---` line, and the body after it; ok is false when there is no
@@ -686,6 +699,16 @@ func runValidate(bundle string) (r *report, crash error) {
 		}
 	}()
 	return validate(bundle), nil
+}
+
+// Findings runs the strict validator on bundle and returns its errors, then
+// its warnings; strict mode fails a bundle on either.
+func Findings(bundle string) ([]Finding, error) {
+	r, crash := runValidate(pyPath(bundle))
+	if crash != nil {
+		return nil, crash
+	}
+	return append(r.errFound, r.warnFound...), nil
 }
 
 func writeText(w io.Writer, bundle string, r *report) {

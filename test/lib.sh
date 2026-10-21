@@ -50,7 +50,8 @@ okf_bin() {
 
 strict_validate() { "$COMPASS" validate "$@"; }
 
-# strip_root_frontmatter <index.md>: drop the frontmatter block, as assembly does.
+# strip_root_frontmatter <index.md>: drop the frontmatter block, as moving a
+# bundle into a hub's repos/<id>/ does.
 strip_root_frontmatter() {
   local f=$1
   [ -f "$f" ] && [ "$(head -1 "$f")" = "---" ] || return 0
@@ -90,36 +91,4 @@ git_isolated() {
 # offline.
 map_owner() {
   git config --global --add "url.file://$2/.insteadOf" "https://github.com/$1/"
-}
-
-# make_folder_remote <bare-path> <bundle-dir>: a code repo whose default
-# branch holds some code plus the bundle at okf/.
-make_folder_remote() {
-  local bare=$1 bundle=$2 w
-  w=$(mktemp -d)
-  git init -q "$w"
-  mkdir -p "$w/src" && echo "package main" > "$w/src/main.go"
-  cp -R "$bundle" "$w/okf"
-  git -C "$w" add -A && git -C "$w" commit -qm base
-  git clone -q --bare "$w" "$bare"
-  rm -rf "$w"
-}
-
-# make_branch_remote <bare-path> <bundle-dir>: a code repo in branch mode:
-# main holds only code, the orphan okf/main holds the bundle at its root.
-make_branch_remote() {
-  local bare=$1 bundle=$2 w
-  w=$(mktemp -d)
-  git init -q "$w"
-  mkdir -p "$w/src" && echo "package main" > "$w/src/main.go"
-  git -C "$w" add -A && git -C "$w" commit -qm base
-  git -C "$w" switch -q --orphan okf/main
-  git -C "$w" rm -rqf --cached . >/dev/null 2>&1 || true
-  rm -rf "${w:?}/src"
-  cp -R "$bundle/." "$w/"
-  mkdir -p "$w/.github/workflows" && echo "name: okf" > "$w/.github/workflows/okf.yml"
-  git -C "$w" add -A && git -C "$w" commit -qm "okf: bundle"
-  git -C "$w" switch -q main
-  git clone -q --bare "$w" "$bare"
-  rm -rf "$w"
 }

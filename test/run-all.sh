@@ -14,10 +14,8 @@ suites=(
   test/install.sh
   test/check-fixture.sh
   test/scale-counts.sh
-  test/bundle-check.sh
-  test/branch-setup.sh
-  test/assemble.sh
   test/setup.sh
+  test/hub-branch.sh
 )
 
 failed=()

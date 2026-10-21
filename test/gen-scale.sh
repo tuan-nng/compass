@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Generate the scale test set (research protocol, "Shared inputs"):
-#   <dir>/repos/rNN/okf/  50 bundles x 200 concepts, plus one root index.md each
-#   (10,050 .md files); concept cIII lives in d(III mod 5)/; every tenth concept
-#   (10%) carries a cross-repo link ../../rMM/dX/cYYY.md that resolves only in
-#   an assembled hub; the string zebracorn-needle appears only in
-#   r37/okf/d3/c123.md. Output is deterministic.
+# Generate the scale hub (research protocol, "Shared inputs"), in the hub's
+# committed layout:
+#   <dir>/index.md       the hub root index, with okf_version frontmatter
+#   <dir>/repos/rNN/     50 repo folders x 200 concepts (10,000 .md files);
+#   concept cIII lives in d(III mod 5)/; every tenth concept (10%) carries a
+#   link ../../rMM/dX/cYYY.md into another repo's folder; the string
+#   zebracorn-needle appears only in repos/r37/d3/c123.md. No index.md below
+#   the root: run `okf index .` at <dir> for those. Output is deterministic.
 #
 # Usage: gen-scale.sh <dir> [repos] [concepts-per-repo]
 set -euo pipefail
 [ $# -ge 1 ] || { echo "usage: gen-scale.sh <dir> [repos] [concepts]" >&2; exit 2; }
 dir=$1 repos=${2:-50} concepts=${3:-200}
 [ ! -e "$dir/repos" ] || { echo "gen-scale.sh: $dir/repos already exists" >&2; exit 1; }
+mkdir -p "$dir"
+printf -- '---\nokf_version: "0.2"\n---\n# Scale hub\n' > "$dir/index.md"
 
 python3 - "$dir" "$repos" "$concepts" <<'PY'
 import os, sys
@@ -22,12 +26,9 @@ def rel(i):
     return f"d{i % 5}/c{i:03d}.md"
 
 for r in range(nrepos):
-    base = os.path.join(root, "repos", f"r{r:02d}", "okf")
+    base = os.path.join(root, "repos", f"r{r:02d}")
     for d in range(5):
         os.makedirs(os.path.join(base, f"d{d}"), exist_ok=True)
-    with open(os.path.join(base, "index.md"), "w") as f:
-        f.write(f'---\nokf_version: "0.2"\n---\n# Repo r{r:02d}\n\n')
-        f.write("".join(f"- [d{d}](d{d}/)\n" for d in range(5)))
     for i in range(nconcepts):
         j = (i + 32) % nconcepts
         lines = [
@@ -57,4 +58,4 @@ for r in range(nrepos):
         with open(os.path.join(base, rel(i)), "w") as f:
             f.write("\n".join(lines) + "\n")
 PY
-echo "gen-scale.sh: wrote $repos bundles x $concepts concepts under $dir/repos"
+echo "gen-scale.sh: wrote $repos repo folders x $concepts concepts under $dir/repos"

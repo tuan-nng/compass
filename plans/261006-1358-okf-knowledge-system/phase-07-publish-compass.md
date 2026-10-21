@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Publish compass"
-status: in-progress
+status: completed
 priority: P1
 effort: 0.5d
 dependencies: [5]
@@ -32,7 +32,7 @@ Owns:
 
 ## Pre-publish checks (2026-10-07)
 
-The secret scan is clean. The history read found one problem: the AgentFlow harness was in history. Following the user's decision, history was rewritten to drop it (below). The GitHub side of the rewrite is still open.
+The secret scan is clean. The history read found one problem: the AgentFlow harness was in history. Following the user's decision, history was rewritten to drop it (below).
 
 - **Secret scan: no findings.** Scanner: gitleaks v8.30.1, run as `go run github.com/zricethezav/gitleaks/v8@v8.30.1 git --log-opts="--all" --redact .`, exit 0, "no leaks found". It scanned 27 of the 28 commits on all refs. The 28th, `59060d6`, only deletes files, so it adds nothing to scan. The `s3cr3t-tok` hits in history are test strings in `test/` that check a token is never printed.
 - **Finding: the AgentFlow harness was in history.** The root commit (old `037d770`, 2026-09-29) added AgentFlow 0.14.0's `.agentflow/`, `.claude/`, `.cursor/` and `.omp/` files, and old `59060d6` (2026-10-06) untracked them. Neither commit touched anything else. AgentFlow comes from a private repo, and the installed `af` binary is built from a local, unpublished module, so this content is not public anywhere else. The user chose to rewrite history rather than accept it or start from a single commit.
@@ -41,7 +41,7 @@ The secret scan is clean. The history read found one problem: the AgentFlow harn
 
 ## History rewrite (2026-10-07)
 
-Local `master` no longer contains the harness. `origin/master` still does, so publishing waits on how the rewritten history reaches GitHub.
+Before the user's force-push, `origin/master` still held the harness. The Result below records the GitHub side.
 
 - **Backup:** before the rewrite, all refs were saved to `/tmp/compass-pre-rewrite.bundle` (`git bundle verify` passed; old tip `00dcdad`).
 - **Rewrite:** done in a separate clone with `uvx git-filter-repo --invert-paths --path .agentflow/ --path .claude/ --path .cursor/ --path .omp/ --path CLAUDE.local.md` (git-filter-repo `a40bce548d2c`). Both harness commits became empty and were pruned, leaving 26 of 28 commits. The new tip `7e4e6a8` has the same tree as the old tip `00dcdad` (`1ed406b`). No object path in the rewritten history is under the four folders, and gitleaks v8.30.1 over all 26 commits reports no leaks. Local `master` was moved to `7e4e6a8` with `git reset --soft`, which keeps the working tree, and the build and `go test ./...` pass.
@@ -55,3 +55,17 @@ Local `master` no longer contains the harness. `origin/master` still does, so pu
   | `9e74c4f` | `fe6965f` | phase 05, plan.md |
 
 - **Decided: force-push only (user, 2026-10-07).** GitHub's docs on removing sensitive data say that after a force-push, the old commits can still be reached through their SHAs in cached views. The user accepted that the harness may stay reachable that way for a while after the repo goes public, and chose not to use a new repo or ask GitHub Support to purge. The repo has no pull requests, forks or Actions runs to hold old refs. The user runs the force-push and the visibility change. The old remote tip is `322786a`.
+
+## Result (2026-10-07)
+
+Compass is public with the rewritten history, and its code downloads without credentials. All three Verification checks pass. Old commits that were pushed before the rewrite are still reachable by SHA, as the user accepted.
+
+- **Push and visibility, run by the user.** `git ls-remote origin` lists only `HEAD` and `refs/heads/master`, both at `29a85ae`, which equals local `master`. `gh repo view tuan-nng/compass --json visibility -q .visibility` prints `PUBLIC`; the repo has 0 forks.
+- **Anonymous download.** `curl -sfL -o /dev/null https://codeload.github.com/tuan-nng/compass/tar.gz/$(git rev-parse origin/master)` exits 0 (HTTP 200). With no git config and no prompt, `git ls-remote https://github.com/tuan-nng/compass master` and a shallow `git clone` also succeed, so the install guide's steps work for anyone.
+- **Secret scan:** recorded above. gitleaks v8.30.1 found no leaks in the 28 pre-rewrite commits or the 26 rewritten ones.
+- **Old commits are reachable, as accepted.** Anonymous fetches by full SHA:
+  - old root `037d770`: codeload HTTP 200, and its tarball holds 181 entries under `.agentflow/`, `.claude/`, `.cursor/` and `.omp/`;
+  - old remote tip `322786a`: codeload and the commits API both return 200;
+  - old local tip `00dcdad`, never pushed: codeload 404, API 422.
+
+  The tarball of `29a85ae` holds no harness entries. This is the outcome the user accepted under the force-push-only decision. Making the old commits unreachable would take a GitHub Support request to purge cached views and unreferenced commits.

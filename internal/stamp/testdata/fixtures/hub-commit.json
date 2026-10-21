@@ -1,0 +1,33 @@
+{
+  "sha": "5b7a1c9e3d2f4a6b8c0d1e2f3a4b5c6d7e8f9a0b",
+  "node_id": "C_kwDOHhub1B9oAKDViN2E",
+  "url": "https://api.github.com/repos/acme/hub/git/commits/5b7a1c9e3d2f4a6b8c0d1e2f3a4b5c6d7e8f9a0b",
+  "html_url": "https://github.com/acme/hub/commit/5b7a1c9e3d2f4a6b8c0d1e2f3a4b5c6d7e8f9a0b",
+  "author": {
+    "name": "Bob Tran",
+    "email": "bob@acme.test",
+    "date": "2026-10-04T08:59:00Z"
+  },
+  "committer": {
+    "name": "GitHub",
+    "email": "noreply@github.com",
+    "date": "2026-10-04T08:59:00Z"
+  },
+  "tree": {
+    "sha": "6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d",
+    "url": "https://api.github.com/repos/acme/hub/git/trees/6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d"
+  },
+  "message": "Merge pull request #42 from acme/web-app/feat/retry",
+  "parents": [
+    {
+      "sha": "1111111111111111111111111111111111111111"
+    },
+    {
+      "sha": "2222222222222222222222222222222222222222"
+    }
+  ],
+  "verification": {
+    "verified": true,
+    "reason": "valid"
+  }
+}

@@ -1,13 +1,15 @@
 ---
 phase: 9
 title: "Branch-mode pilot"
-status: pending
+status: cancelled
 priority: P2
 effort: 1.5d + pilot window
 dependencies: [8]
 ---
 
 # Phase 9: Branch-mode pilot
+
+**Cancelled on 2026-10-21** by plan decision 23: branch mode is removed. Its live sync merge, its CI and cloud agent checks, and its stamp on the hub moved into the hub-only pilot, phase 08. The text below is the record of the cancelled phase.
 
 ## Overview
 
