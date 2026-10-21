@@ -13,11 +13,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -36,7 +34,7 @@ holds a clone of it, and stops before writing anything if not. Then it:
   - installs the pinned okf into DIR/bin (default DIR: ~/.local);
   - clones the hub into its folder, or reuses the clone already there;
   - records the hub and its folder in $XDG_CONFIG_HOME/compass/config
-    (default ~/.config/compass/config); ` + "`compass hub assemble`" + `, ` + "`hub check`" + `,
+    (default ~/.config/compass/config); ` + "`compass hub branch`" + `, ` + "`hub check`" + `,
     ` + "`stamp`" + ` and ` + "`sync`" + ` use that folder when given none;
   - installs the OKF skill into each agent's user-level skill folder:
       claude  ${CLAUDE_CONFIG_DIR:-~/.claude}/skills/okf
@@ -183,7 +181,7 @@ func setup(o options, stdin io.Reader, stdout, stderr io.Writer, getenv func(str
 	}
 	if err := checkHub(o.hub); err != nil {
 		return fmt.Errorf("cannot read hub %s: %v; nothing written.\n"+
-			"setup: git reads the hub, and `compass hub assemble` its repos, over https://github.com/;"+
+			"setup: git reads the hub over https://github.com/;"+
 			" give git credentials for it (for example `gh auth setup-git`) and run setup again", o.hub, err)
 	}
 	reuse, err := existingClone(hubDir, o.hub)
@@ -243,7 +241,7 @@ func setup(o options, stdin io.Reader, stdout, stderr io.Writer, getenv func(str
 		fmt.Fprintf(stdout, "setup: note: %s is not on PATH; add it so agents can run okf\n", bin)
 	}
 	if _, err := exec.LookPath("compass"); err != nil {
-		fmt.Fprintln(stdout, "setup: note: compass is not on PATH; agents run `compass branch setup` and `compass hub assemble`")
+		fmt.Fprintln(stdout, "setup: note: compass is not on PATH; agents run `compass hub branch`, `compass hub check` and `compass sync`")
 	}
 	return nil
 }
@@ -338,49 +336,16 @@ func existingClone(dir, hub string) (bool, error) {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
 		return false, fmt.Errorf("hub folder %s is not empty and is not a git clone", dir)
 	}
-	// The configured URL first, before any url.<base>.insteadOf rewrite: a
-	// user who maps https://github.com/ to ssh still has a clone of the same
-	// hub. Then the rewritten one, for host aliases that map to GitHub.
-	var origin string
-	for _, args := range [][]string{{"config", "--get", "remote.origin.url"}, {"remote", "get-url", "origin"}} {
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
-		if err != nil {
-			continue
-		}
-		remote := withoutUserinfo(strings.TrimSpace(string(out)))
-		if strings.EqualFold(githubRepo(remote), hub) {
+	repos, origin := config.OriginRepos(dir)
+	for _, r := range repos {
+		if strings.EqualFold(r, hub) {
 			return true, nil
-		}
-		if origin == "" {
-			origin = remote
 		}
 	}
 	if origin == "" {
 		origin = "no origin"
 	}
 	return false, fmt.Errorf("hub folder %s holds a clone of %s, not %s", dir, origin, hub)
-}
-
-// withoutUserinfo drops the user and password from a URL-form remote, so a
-// token in it is neither matched on nor printed. scp-form remotes
-// (git@host:path) carry no password and come back unchanged.
-func withoutUserinfo(remote string) string {
-	if u, err := url.Parse(remote); err == nil && u.Scheme != "" && u.User != nil {
-		u.User = nil
-		return u.String()
-	}
-	return remote
-}
-
-var originRe = regexp.MustCompile(`^(?:https://github\.com/|git@github\.com:|ssh://github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$`)
-
-// githubRepo returns OWNER/REPO for a GitHub https or ssh remote URL without
-// userinfo, else "".
-func githubRepo(remote string) string {
-	if m := originRe.FindStringSubmatch(remote); m != nil {
-		return m[1]
-	}
-	return ""
 }
 
 // cloneHub clones hub into dir over https with the caller's git credentials,

@@ -1,0 +1,10 @@
+{
+  "ref": "refs/heads/main",
+  "node_id": "REF_kwDOHhub1B7JyZWZzL2hlYWRzL21haW4",
+  "url": "https://api.github.com/repos/acme/hub/git/refs/heads/main",
+  "object": {
+    "sha": "5b7a1c9e3d2f4a6b8c0d1e2f3a4b5c6d7e8f9a0b",
+    "type": "commit",
+    "url": "https://api.github.com/repos/acme/hub/git/commits/5b7a1c9e3d2f4a6b8c0d1e2f3a4b5c6d7e8f9a0b"
+  }
+}

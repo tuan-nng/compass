@@ -1,9 +1,11 @@
 // Package ghfake is a fake GitHub transport for the stamp and sync tests,
-// replaying recorded API responses.
+// replaying recorded API responses, plus the real local hub clone those
+// tests run against (hub.go).
 //
 // Routes are keyed by method and path; an optional query must be a subset of
 // the request's query. Every request is recorded, so tests assert the exact
-// write calls. An unrouted request fails the test.
+// write calls. An unrouted request fails the test, and so does any write
+// under a path marked read-only, the code repos (plan decision 6).
 package ghfake
 
 import (
@@ -16,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -50,7 +53,8 @@ type route struct {
 	status       int
 	body         any
 	headers      map[string]string
-	times        int // -1: unlimited
+	times        int    // -1: unlimited
+	then         func() // runs after the route answers, with the fake unlocked
 }
 
 // Option changes one route.
@@ -68,16 +72,51 @@ func Header(k, v string) Option { return func(r *route) { r.headers[k] = v } }
 // Times limits how often the route answers.
 func Times(n int) Option { return func(r *route) { r.times = n } }
 
+// Then runs fn each time the route answers, after the fake has recorded the
+// call, so fn may add routes: a merge that moves the default branch, say.
+func Then(fn func()) Option { return func(r *route) { r.then = fn } }
+
 // Fake is an http.RoundTripper that answers from registered routes.
 type Fake struct {
-	t      testing.TB
-	mu     sync.Mutex
-	routes []*route
-	Calls  []Call
+	t        testing.TB
+	mu       sync.Mutex
+	routes   []*route
+	readOnly []string
+	Calls    []Call
 }
 
 // New returns an empty fake bound to t.
 func New(t testing.TB) *Fake { return &Fake{t: t} }
+
+// ReadOnly marks repo API paths, such as /repos/acme/web-app, that no write
+// may touch: compass never writes to a code repo (plan decision 6). Any POST,
+// PATCH, PUT or DELETE at or under one fails the test and gets no response.
+func (f *Fake) ReadOnly(repoPaths ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.readOnly = append(f.readOnly, repoPaths...)
+}
+
+func isWrite(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete:
+		return true
+	}
+	return false
+}
+
+// underReadOnly returns the read-only repo path holding path, or "". GitHub
+// names are case-insensitive.
+func (f *Fake) underReadOnly(path string) string {
+	lower := strings.ToLower(path)
+	for _, p := range f.readOnly {
+		p = strings.ToLower(strings.TrimRight(p, "/"))
+		if lower == p || strings.HasPrefix(lower, p+"/") {
+			return p
+		}
+	}
+	return ""
+}
 
 // Add registers a response. Later routes win. A nil body sends no body.
 func (f *Fake) Add(method, path string, body any, opts ...Option) {
@@ -124,8 +163,24 @@ func (f *Fake) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	path, _ := url.PathUnescape(req.URL.EscapedPath())
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	resp, then, err := f.answer(req, path, query, body)
+	f.mu.Unlock()
+	if then != nil {
+		then()
+	}
+	return resp, err
+}
+
+// answer records the call and returns the response of the latest matching
+// route, with its Then hook; the caller holds f.mu.
+func (f *Fake) answer(req *http.Request, path string, query map[string]string, body any) (*http.Response, func(), error) {
 	f.Calls = append(f.Calls, Call{req.Method, path, query, body})
+	if isWrite(req.Method) {
+		if repo := f.underReadOnly(path); repo != "" {
+			f.t.Errorf("write under code repo %s, which compass only reads: %s %s", repo, req.Method, path)
+			return nil, nil, fmt.Errorf("write under read-only %s: %s %s", repo, req.Method, path)
+		}
+	}
 	for _, r := range f.routes {
 		if r.method != req.Method || r.path != path || !subset(r.query, query) {
 			continue
@@ -149,10 +204,10 @@ func (f *Fake) RoundTrip(req *http.Request) (*http.Response, error) {
 			Header:     h,
 			Body:       io.NopCloser(bytes.NewReader(raw)),
 			Request:    req,
-		}, nil
+		}, r.then, nil
 	}
 	f.t.Errorf("unrouted request: %s %s %v", req.Method, path, query)
-	return nil, fmt.Errorf("unrouted request: %s %s", req.Method, path)
+	return nil, nil, fmt.Errorf("unrouted request: %s %s", req.Method, path)
 }
 
 func subset(want, got map[string]string) bool {
@@ -170,8 +225,7 @@ func (f *Fake) Writes() []Call {
 	defer f.mu.Unlock()
 	var out []Call
 	for _, c := range f.Calls {
-		switch c.Method {
-		case http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete:
+		if isWrite(c.Method) {
 			out = append(out, c)
 		}
 	}
@@ -206,57 +260,4 @@ func With(obj any, changes map[string]any) map[string]any {
 // Contents is a contents-API file response holding text.
 func Contents(text string) map[string]any {
 	return map[string]any{"type": "file", "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(text))}
-}
-
-// WriteHub writes repos.txt and checks.txt into dir and returns dir.
-func WriteHub(t testing.TB, dir, repos, checks string) string {
-	t.Helper()
-	for name, text := range map[string]string{"repos.txt": repos, "checks.txt": checks} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return dir
-}
-
-// TemplateHub copies the shipped hub template (templates/hub/) into dir,
-// appends one row to its repos.txt and checks.txt under their headers, and
-// returns dir. The template itself is never written.
-func TemplateHub(t testing.TB, dir, reposRow, checksRow string) string {
-	t.Helper()
-	// Tests run in their package folder; the template sits under the module
-	// root, the nearest folder up that holds go.mod.
-	root, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
-			break
-		}
-		parent := filepath.Dir(root)
-		if parent == root {
-			t.Fatal("no go.mod above the test's folder")
-		}
-		root = parent
-	}
-	src := filepath.Join(root, "templates", "hub")
-	err = os.CopyFS(dir, os.DirFS(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, row := range map[string]string{"repos.txt": reposRow, "checks.txt": checksRow} {
-		f, err := os.OpenFile(filepath.Join(dir, name), os.O_APPEND|os.O_WRONLY, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = f.WriteString(row + "\n")
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	return dir
 }

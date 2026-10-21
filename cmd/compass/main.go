@@ -9,8 +9,6 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"compass/internal/branchsetup"
-	"compass/internal/bundlecheck"
 	"compass/internal/hub"
 	"compass/internal/okfinstall"
 	"compass/internal/setup"
@@ -33,12 +31,10 @@ var commands = []command{
 	{"setup", "connect this machine to your hub: okf, config and the skill", setup.Main},
 	{"okf install", "install the pinned okf binary", okfinstall.Main},
 	{"validate", "run the strict OKF validator on a bundle", validate.Main},
-	{"bundle check", "check a bundle as repo CI does", bundlecheck.Main},
-	{"hub assemble", "fetch every repos.txt bundle into a hub's repos/", hub.AssembleMain},
-	{"hub check", "check an assembled hub", hub.CheckMain},
-	{"branch setup", "set up branch-mode okf/ in a clone", branchsetup.Main},
+	{"hub check", "check a hub: strict validator, concept counts, indexes, no links", hub.CheckMain},
+	{"hub branch", "print the hub worktree for this code branch; --prune removes finished ones", hub.BranchMain},
 	{"stamp", "write process: stamps from checks.txt", stamp.Main},
-	{"sync", "carry out the branch-mode knowledge pull request state table", syncjob.Main},
+	{"sync", "carry out the hub knowledge pull request state table", syncjob.Main},
 	{"version", "print the build's commit", versionMain},
 }
 

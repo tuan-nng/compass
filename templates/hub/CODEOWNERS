@@ -1,5 +1,6 @@
-# These files decide which repos every developer's assembly fetches and which
-# concepts `compass stamp` stamps, so each change needs a code owner's review.
+# These files decide which repos `compass sync` reads and which hub branches
+# it may merge, and which concepts `compass stamp` stamps, so each change needs
+# a code owner's review.
 # Replace @OKF_HUB_OWNERS with the people or team who approve changes to them.
 /CODEOWNERS @OKF_HUB_OWNERS
 /repos.txt  @OKF_HUB_OWNERS

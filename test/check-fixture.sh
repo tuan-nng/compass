@@ -84,7 +84,7 @@ for b in billing-api/okf web-app/okf shared-auth/okf; do
 done
 copy_hub "$P" "$work/proto-hub" strip
 PH="$work/proto-hub"
-check "proto hub assembled with stripped indexes passes the strict validator" strict_validate "$PH"
+check "proto hub with stripped repo indexes passes the strict validator" strict_validate "$PH"
 check "proto web-app has no links into other repos' files" bash -c "! grep -qE '\]\(\.\./\.\./' '$P/web-app/okf/services/web-app.md'"
 want='["cross-repo/invoice-dependency","repos/billing-api/gotchas/idempotency-key","repos/billing-api/services/billing-api"]'
 got=$("$O" backlinks "$PH" repos/billing-api/contracts/invoice-api | jq -c '.backlinks | sort')

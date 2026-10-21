@@ -1,7 +1,7 @@
 {
   "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1",
   "node_id": "C_kwDOGfq1B9oAKGJi",
-  "url": "https://api.github.com/repos/acme/billing-api/git/commits/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1",
+  "url": "https://api.github.com/repos/acme/hub/git/commits/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1",
   "author": {
     "name": "okf-writer[bot]",
     "email": "1234+okf-writer[bot]@users.noreply.github.com",
@@ -14,12 +14,12 @@
   },
   "tree": {
     "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
-    "url": "https://api.github.com/repos/acme/billing-api/git/trees/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"
+    "url": "https://api.github.com/repos/acme/hub/git/trees/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"
   },
   "message": "okf: process stamps",
   "parents": [
     {
-      "sha": "3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+      "sha": "5b7a1c9e3d2f4a6b8c0d1e2f3a4b5c6d7e8f9a0b"
     }
   ],
   "verification": {

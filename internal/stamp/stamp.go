@@ -1,12 +1,15 @@
 // Package stamp implements "compass stamp": it writes
-// "verified: process:<actor>" stamps from checks.txt rows.
+// "verified: process:<actor>" stamps from checks.txt rows on the hub.
 //
+// The hub is the GitHub repo the hub clone's origin names, and repos.txt and
+// checks.txt come from the clone's fetched default branch (plan decision 7).
 // For each row the stamper finds the latest push run of the named workflow
-// file on the default branch's head commit, and the named job in it. If that
-// job succeeded, it stamps the row's concepts as they are at the commit it
-// read (folder mode: that head; branch mode: the okf/main head), dated with
-// the job's completion time, and fast-forwards the branch to a new commit.
-// See the plan's Design section, "Stamper".
+// file on the code repo's default-branch head, and the named job in it, and
+// only reads the code repo (plan decision 6). If that job succeeded, it
+// stamps the row's concepts, repos/<id>/<concept>.md on the hub's default
+// branch as it read it, dated with the job's completion time. Every stamp of
+// the run chains into commits on that head, and the hub's default branch
+// moves to the last one with one fast-forward (plan decision 10).
 package stamp
 
 import (
@@ -16,7 +19,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -34,13 +36,14 @@ type repoFailure struct{ msg string }
 
 func (e *repoFailure) Error() string { return e.msg }
 
-func refSHA(gh *github.Client, repo *config.Repo, branch string) (string, error) {
+// refSHA returns branch's head in the repo at REST path api.
+func refSHA(gh *github.Client, api, branch string) (string, error) {
 	var ref struct {
 		Object struct {
 			SHA string `json:"sha"`
 		} `json:"object"`
 	}
-	found, err := gh.GetOptional(repo.API()+"/git/ref/heads/"+github.QuotePath(branch), nil, &ref)
+	found, err := gh.GetOptional(api+"/git/ref/heads/"+github.QuotePath(branch), nil, &ref)
 	if err != nil {
 		return "", err
 	}
@@ -136,11 +139,11 @@ func runID(v any) string {
 	}
 }
 
-// fetch returns the file text at commit sha; found=false when the path does
-// not exist.
-func fetch(gh *github.Client, repo *config.Repo, path, sha string) (text string, found bool, err error) {
+// fetch returns the file text at commit sha of the repo at REST path api;
+// found=false when the path does not exist.
+func fetch(gh *github.Client, api, path, sha string) (text string, found bool, err error) {
 	var data any
-	found, err = gh.GetOptional(repo.API()+"/contents/"+github.QuotePath(path), url.Values{"ref": {sha}}, &data)
+	found, err = gh.GetOptional(api+"/contents/"+github.QuotePath(path), url.Values{"ref": {sha}}, &data)
 	if err != nil || !found {
 		return "", found, err
 	}
@@ -195,38 +198,42 @@ type logLine struct {
 	text string
 }
 
-// stampRepo stamps every row of one repo from one read. It returns ok=false
-// when a concept failed or GitHub refused the push; err stops the repo.
-func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dryRun bool, log func(string)) (bool, error) {
-	ok := true
+// target is where every stamp of a run lands: the hub's default branch at
+// the head the run read.
+type target struct {
+	api, name string // REST path and owner/repo of the hub
+	branch    string
+	head      string
+}
+
+// where names the hub branch in log lines.
+func (h *target) where() string { return h.name + " " + h.branch }
+
+// stampRepo stamps every row of one code repo onto the hub head h read. It
+// returns the commits to chain and one log line per row, printed once the
+// push outcome is known; ok=false when a concept failed. err stops the repo.
+func stampRepo(gh *github.Client, h *target, repo *config.Repo, rows []*config.CheckRow, dryRun bool,
+	log func(string)) (commits []commit, lines []logLine, ok bool, err error) {
+	ok = true
 	var info struct {
 		DefaultBranch string `json:"default_branch"`
 	}
 	if err := gh.Get(repo.API(), nil, &info); err != nil {
-		return false, err
+		return nil, nil, false, err
 	}
 	def := info.DefaultBranch
-	head, err := refSHA(gh, repo, def)
+	head, err := refSHA(gh, repo.API(), def)
 	if err != nil {
-		return false, err
+		return nil, nil, false, err
 	}
-	branch, readSHA, prefix := def, head, "okf/"
-	if repo.Mode != "folder" {
-		branch, prefix = "okf/main", ""
-		if readSHA, err = refSHA(gh, repo, branch); err != nil {
-			return false, err
-		}
-	}
-
-	files := map[string]string{} // path -> current text, starting from the read commit
-	var commits []commit
-	var lines []logLine // one per row, printed once the push outcome is known
+	prefix := "repos/" + repo.Name + "/"
+	files := map[string]string{} // path -> current text, starting from the hub head
 
 	for _, row := range rows {
 		label := fmt.Sprintf("%s: %s %s/%s %s", Prog, repo.Name, row.Workflow, row.Job, row.Actor)
 		completed, err := findJob(gh, repo, row, def, head)
 		if err != nil {
-			return false, err
+			return nil, nil, false, err
 		}
 		if completed == "" {
 			lines = append(lines, logLine{row, fmt.Sprintf("%s: no check run on head %s", label, short(head))})
@@ -234,7 +241,7 @@ func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dr
 		}
 		at, err := frontmatter.ParseTime(completed)
 		if err != nil {
-			return false, err
+			return nil, nil, false, err
 		}
 		changed := map[string]string{}
 		var stamped, missing []string
@@ -244,12 +251,12 @@ func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dr
 			text, have := files[path]
 			if !have {
 				var found bool
-				text, found, err = fetch(gh, repo, path, readSHA)
+				text, found, err = fetch(gh, h.api, path, h.head)
 				if err != nil && !isFileErr(err) {
-					return false, err
+					return nil, nil, false, err
 				}
 				if err == nil && !found {
-					missing = append(missing, cid)
+					missing = append(missing, path)
 					continue
 				}
 				if err == nil {
@@ -273,107 +280,86 @@ func stampRepo(gh *github.Client, repo *config.Repo, rows []*config.CheckRow, dr
 			}
 		}
 		if len(missing) > 0 {
-			paths := make([]string, len(missing))
-			for i, c := range missing {
-				paths[i] = prefix + c + ".md"
-			}
 			log(fmt.Sprintf("%s: error: %s: concept not found at %s %s: %s",
-				Prog, row.Where(), branch, short(readSHA), strings.Join(paths, ", ")))
+				Prog, row.Where(), h.where(), short(h.head), strings.Join(missing, ", ")))
 			ok = false
 		}
 		if len(changed) > 0 {
-			message := fmt.Sprintf("okf: process stamps from %s (%s/%s @ %s)", row.Actor, row.Workflow, row.Job, short(head))
+			message := fmt.Sprintf("okf: process stamps from %s (%s %s/%s @ %s)", row.Actor, repo.Name, row.Workflow, row.Job, short(head))
 			commits = append(commits, commit{row, message, changed})
 			verb := "stamped"
 			if dryRun {
 				verb = "would stamp"
 			}
 			lines = append(lines, logLine{row, fmt.Sprintf("%s: %s %s on %s at %s",
-				label, verb, strings.Join(stamped, ", "), branch, frontmatter.FormatTime(at))})
+				label, verb, strings.Join(stamped, ", "), h.where(), frontmatter.FormatTime(at))})
 		} else {
-			lines = append(lines, logLine{row, fmt.Sprintf("%s: nothing due on %s %s", label, branch, short(readSHA))})
+			lines = append(lines, logLine{row, fmt.Sprintf("%s: nothing due on %s %s", label, h.where(), short(h.head))})
 		}
 	}
+	return commits, lines, ok, nil
+}
 
-	suffix, refusal := "", ""
-	if len(commits) > 0 && !dryRun {
-		parent := readSHA
-		var base struct {
-			Tree struct {
-				SHA string `json:"sha"`
-			} `json:"tree"`
-		}
-		if err := gh.Get(repo.API()+"/git/commits/"+readSHA, nil, &base); err != nil {
-			return false, err
-		}
-		tree := base.Tree.SHA
-		for _, c := range commits {
-			paths := make([]string, 0, len(c.changed))
-			for p := range c.changed {
-				paths = append(paths, p)
-			}
-			sort.Strings(paths)
-			entries := make([]map[string]string, len(paths))
-			for i, p := range paths {
-				entries[i] = map[string]string{"path": p, "mode": "100644", "type": "blob", "content": c.changed[p]}
-			}
-			var t, nc struct {
-				SHA string `json:"sha"`
-			}
-			if _, err := gh.Post(repo.API()+"/git/trees", map[string]any{"base_tree": tree, "tree": entries}, &t); err != nil {
-				return false, err
-			}
-			if _, err := gh.Post(repo.API()+"/git/commits",
-				map[string]any{"message": c.message, "tree": t.SHA, "parents": []string{parent}}, &nc); err != nil {
-				return false, err
-			}
-			tree, parent = t.SHA, nc.SHA
-		}
-		var refused struct {
-			Message string `json:"message"`
-		}
-		status, err := gh.Patch(repo.API()+"/git/refs/heads/"+github.QuotePath(branch),
-			map[string]any{"sha": parent, "force": false}, &refused, 409, 422)
-		if err != nil {
-			return false, err
-		}
-		if status == 409 || status == 422 {
-			// A race and a protection refusal share these statuses, and
-			// GitHub's message text is not a contract, so the head decides.
-			now, err := refSHA(gh, repo, branch)
-			if err != nil {
-				return false, err
-			}
-			if now != readSHA {
-				suffix = fmt.Sprintf(" (not pushed: %s moved after %s; next run retries)", branch, short(readSHA))
-			} else {
-				suffix = " (not pushed: refused)"
-				refusal = fmt.Sprintf("%s: error: %s: GitHub refused the update to %s at %s with HTTP %d %q;"+
-					" branch protection or a ruleset likely blocks this account, which needs a bypass",
-					Prog, repo.Name, branch, short(readSHA), status, refused.Message)
-				ok = false
-			}
-		} else {
-			suffix = fmt.Sprintf(" (commit %s)", short(parent))
-		}
+// push chains commits onto the hub head h read and moves h.branch to the last
+// one with a single fast-forward (plan decision 10). suffix ends each
+// committed row's log line; refusal is set when GitHub refused the update
+// while the head had not moved.
+func push(gh *github.Client, h *target, commits []commit) (suffix, refusal string, err error) {
+	parent := h.head
+	var base struct {
+		Tree struct {
+			SHA string `json:"sha"`
+		} `json:"tree"`
 	}
-	for _, l := range lines {
-		committed := false
-		for _, c := range commits {
-			if c.row == l.row {
-				committed = true
-			}
-		}
-		if committed {
-			log(l.text + suffix)
-		} else {
-			log(l.text)
-		}
+	if err := gh.Get(h.api+"/git/commits/"+h.head, nil, &base); err != nil {
+		return "", "", err
 	}
-	if refusal != "" {
-		log(refusal)
+	tree := base.Tree.SHA
+	for _, c := range commits {
+		paths := make([]string, 0, len(c.changed))
+		for p := range c.changed {
+			paths = append(paths, p)
+		}
+		sort.Strings(paths)
+		entries := make([]map[string]string, len(paths))
+		for i, p := range paths {
+			entries[i] = map[string]string{"path": p, "mode": "100644", "type": "blob", "content": c.changed[p]}
+		}
+		var t, nc struct {
+			SHA string `json:"sha"`
+		}
+		if _, err := gh.Post(h.api+"/git/trees", map[string]any{"base_tree": tree, "tree": entries}, &t); err != nil {
+			return "", "", err
+		}
+		if _, err := gh.Post(h.api+"/git/commits",
+			map[string]any{"message": c.message, "tree": t.SHA, "parents": []string{parent}}, &nc); err != nil {
+			return "", "", err
+		}
+		tree, parent = t.SHA, nc.SHA
 	}
-	return ok, nil
+	var refused struct {
+		Message string `json:"message"`
+	}
+	status, err := gh.Patch(h.api+"/git/refs/heads/"+github.QuotePath(h.branch),
+		map[string]any{"sha": parent, "force": false}, &refused, 409, 422)
+	if err != nil {
+		return "", "", err
+	}
+	if status != 409 && status != 422 {
+		return fmt.Sprintf(" (commit %s)", short(parent)), "", nil
+	}
+	// A race and a protection refusal share these statuses, and GitHub's
+	// message text is not a contract, so the head decides.
+	now, err := refSHA(gh, h.api, h.branch)
+	if err != nil {
+		return "", "", err
+	}
+	if now != h.head {
+		return fmt.Sprintf(" (not pushed: %s moved after %s; next run retries)", h.where(), short(h.head)), "", nil
+	}
+	return " (not pushed: refused)", fmt.Sprintf("GitHub refused the update to %s at %s with HTTP %d %q;"+
+		" branch protection or a ruleset likely blocks this account, which needs a bypass on the hub's %s",
+		h.where(), short(h.head), status, refused.Message, h.branch), nil
 }
 
 func short(sha string) string {
@@ -383,18 +369,42 @@ func short(sha string) string {
 	return sha
 }
 
-// Run stamps every checks.txt row under hub and returns the exit code: 0 when
-// every repo succeeded, 1 when any failed, 2 on a configuration error.
-func Run(hub string, gh *github.Client, dryRun bool, log func(string)) int {
-	repos, err := config.ParseRepos(filepath.Join(hub, "repos.txt"))
-	if err != nil {
+// Run stamps every checks.txt row and returns the exit code: 0 when every
+// repo succeeded, 1 when any failed or the hub could not be read or written,
+// 2 on a configuration error. hubDir is the hub clone: its origin names the
+// hub, and repos.txt and checks.txt come from its default branch as fetched
+// now (plan decision 7).
+func Run(hubDir string, gh *github.Client, dryRun bool, log func(string)) int {
+	configErr := func(err error) int {
 		log(fmt.Sprintf("%s: error: %v", Prog, err))
 		return 2
 	}
-	rows, err := config.ParseChecks(filepath.Join(hub, "checks.txt"), repos)
+	owner, name, err := config.HubRepo(hubDir)
 	if err != nil {
-		log(fmt.Sprintf("%s: error: %v", Prog, err))
-		return 2
+		return configErr(err)
+	}
+	h := &target{api: "/repos/" + owner + "/" + name, name: owner + "/" + name}
+	hubErr := func(err error) int {
+		log(fmt.Sprintf("%s: error: hub %s: %v", Prog, h.name, err))
+		return 1
+	}
+	if err := config.Fetch(hubDir); err != nil {
+		return hubErr(err)
+	}
+	if h.branch, err = config.RemoteDefault(hubDir); err != nil {
+		return configErr(err)
+	}
+	repos, err := config.HubRepos(hubDir, h.branch)
+	if err != nil {
+		return configErr(err)
+	}
+	checksTxt, err := config.ControlFile(hubDir, h.branch, "checks.txt")
+	if err != nil {
+		return configErr(err)
+	}
+	rows, err := config.ParseChecks(checksTxt, repos)
+	if err != nil {
+		return configErr(err)
 	}
 	var order []string
 	byRepo := map[string][]*config.CheckRow{}
@@ -404,15 +414,46 @@ func Run(hub string, gh *github.Client, dryRun bool, log func(string)) int {
 		}
 		byRepo[row.Repo.Name] = append(byRepo[row.Repo.Name], row)
 	}
+	if len(order) == 0 {
+		return 0
+	}
+	if h.head, err = refSHA(gh, h.api, h.branch); err != nil {
+		return hubErr(err)
+	}
 	ok := true
+	var commits []commit
+	var lines []logLine
 	for _, name := range order {
-		repoOK, err := stampRepo(gh, repos.ByName[name], byRepo[name], dryRun, log)
+		c, l, repoOK, err := stampRepo(gh, h, repos.ByName[name], byRepo[name], dryRun, log)
 		if err != nil {
 			log(fmt.Sprintf("%s: error: %s: %v", Prog, name, err))
 			ok = false
 			continue
 		}
+		commits = append(commits, c...)
+		lines = append(lines, l...)
 		ok = repoOK && ok
+	}
+	suffix, refusal := "", ""
+	if len(commits) > 0 && !dryRun {
+		if suffix, refusal, err = push(gh, h, commits); err != nil {
+			return hubErr(err)
+		}
+	}
+	committed := map[*config.CheckRow]bool{}
+	for _, c := range commits {
+		committed[c.row] = true
+	}
+	for _, l := range lines {
+		if committed[l.row] {
+			log(l.text + suffix)
+		} else {
+			log(l.text)
+		}
+	}
+	if refusal != "" {
+		log(fmt.Sprintf("%s: error: hub %s: %s", Prog, h.name, refusal))
+		ok = false
 	}
 	if ok {
 		return 0
@@ -424,12 +465,17 @@ const usage = "usage: compass stamp [-h] [--hub DIR] [--dry-run] [--token-env NA
 
 const help = usage + `
 Write verified: process:<actor> stamps for the concepts each checks.txt row
-covers, when its workflow job passed on the default-branch head.
+covers, at repos/<id>/<concept>.md on the hub's default branch, when its
+workflow job passed on the head of the code repo's default branch. Every
+stamp of the run lands with one fast-forward of the hub's default branch,
+which needs a ruleset bypass for this account; code repos are only read.
 
 options:
   -h, --help        show this help message and exit
-  --hub DIR         hub checkout holding repos.txt and checks.txt (default:
-                    the hub clone that ` + "`compass setup`" + ` recorded)
+  --hub DIR         hub clone whose origin names the hub repo; repos.txt and
+                    checks.txt are read from its default branch as fetched
+                    now (default: the hub clone that ` + "`compass setup`" + `
+                    recorded)
   --dry-run         read GitHub and log what would change; make no write calls
   --token-env NAME  environment variable holding the API token (default:
                     GITHUB_TOKEN)

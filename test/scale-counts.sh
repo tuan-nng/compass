@@ -7,9 +7,10 @@ d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
 "$TOOLS_ROOT/test/gen-scale.sh" "$d" >/dev/null
 
-check "10050 .md files under repos/" test "$(find "$d/repos" -name '*.md' | wc -l)" -eq 10050
+check "10000 .md files under repos/" test "$(find "$d/repos" -name '*.md' | wc -l)" -eq 10000
+check "a root index.md with okf_version" grep -q '^okf_version:' "$d/index.md"
 hits=$(grep -rl zebracorn-needle "$d/repos")
-check "zebracorn-needle only in r37/okf/d3/c123.md" test "$hits" = "$d/repos/r37/okf/d3/c123.md"
+check "zebracorn-needle only in repos/r37/d3/c123.md" test "$hits" = "$d/repos/r37/d3/c123.md"
 total=$(find "$d/repos" -name 'c*.md' | wc -l)
 cross=$(grep -rlE '\]\(\.\./\.\./r[0-9]{2}/' "$d/repos" | wc -l)
 pct=$((cross * 100 / total))

@@ -6,5 +6,5 @@ Bundle root.
 
 | Title | Type | Description |
 |-------|------|-------------|
-| [Knowledge hub](overview.md) | Overview | How to fill in this hub, assemble and check it on your machine, run the stamp... |
+| [Knowledge hub](overview.md) | Overview | How to fill in this hub, write knowledge through hub branches, check it, run ... |
 

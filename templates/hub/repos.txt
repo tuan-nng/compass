@@ -1,8 +1,8 @@
-# <name> <git URL> <folder|branch>
-# One row per repo whose knowledge bundle the hub assembles into repos/<name>/.
-#   name    folder name under repos/; letters, digits, ".", "_" and "-"
-#   URL     https://github.com/<owner>/<repo>, for any owner
-#   mode    folder: the bundle is okf/ on the default branch
-#           branch: the bundle is the root of the okf/main branch
+# <id> <URL>
+# One row per repo whose knowledge the hub holds under repos/<id>/.
+#   id   folder name under repos/ and prefix of the repo's hub branches
+#        <id>/<branch>; letters, digits, ".", "_" and "-", not starting
+#        with "." or "-", without "..", not ending in ".lock"
+#   URL  https://github.com/<owner>/<repo>, for any owner
 # Example:
-#   billing-api https://github.com/acme/billing-api folder
+#   billing-api https://github.com/acme/billing-api

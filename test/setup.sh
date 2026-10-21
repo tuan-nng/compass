@@ -16,16 +16,19 @@ okf=$(okf_bin) || { echo "FAIL: no okf binary"; exit 1; }
 
 git_isolated "$work/gitconfig"
 map_owner acme "$work/remotes"
-make_folder_remote "$work/remotes/billing-api.git" "$TESTDATA/proto/billing-api/okf"
-# The hub: the shipped template plus one repo, as an end user makes it.
+# The hub: the shipped template plus one repo's knowledge under repos/<id>/,
+# as an end user makes it.
 cp -R "$TOOLS_ROOT/templates/hub" "$work/seed"
-echo "billing-api https://github.com/acme/billing-api folder" >> "$work/seed/repos.txt"
+echo "billing-api https://github.com/acme/billing-api" >> "$work/seed/repos.txt"
+mkdir -p "$work/seed/repos" && cp -R "$TESTDATA/proto/billing-api/okf" "$work/seed/repos/billing-api"
+strip_root_frontmatter "$work/seed/repos/billing-api/index.md"
+(cd "$work/seed" && "$okf" index . >/dev/null)
 git init -q "$work/seed" && git -C "$work/seed" add -A && git -C "$work/seed" commit -qm hub
 git clone -q --bare "$work/seed" "$work/remotes/hub.git"
 git clone -q --bare "$work/seed" "$work/remotes/other.git"
 
 unset CLAUDE_CONFIG_DIR PI_CODING_AGENT_DIR
-export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config OKF_HUB_CACHE=$work/home/.cache/okf-hub
+export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config
 mkdir -p "$HOME/.claude" "$HOME/.omp/agent"
 cfg=$XDG_CONFIG_HOME/compass/config
 bin=$HOME/.local/bin
@@ -49,11 +52,10 @@ check "config records the hub" grep -qx 'OKF_HUB=acme/hub' "$cfg"
 check "config records the clone" grep -qx "OKF_HUB_DIR=$clone" "$cfg"
 
 # The hub commands use the recorded clone when given no folder.
-(cd "$work" && compass hub assemble --ci) >"$work/asm" 2>&1
-check "hub assemble with no folder assembles the recorded clone" test -f "$clone/repos/billing-api/overview.md"
 (cd "$work" && OKF=$bin/okf compass hub check) >"$work/hubcheck" 2>&1
 check "hub check with no folder checks the recorded clone" test $? -eq 0
-check "hub check names the clone" grep -q "strict validator: $clone" "$work/hubcheck"
+check "hub check names the clone" grep -qx "hub check: $clone" "$work/hubcheck"
+check "the clone holds the repo's knowledge" test -f "$clone/repos/billing-api/overview.md"
 
 before=$(snapshot "$HOME")
 compass setup --hub acme/hub --yes --okf-bin "$okf" </dev/null >"$work/out2" 2>&1

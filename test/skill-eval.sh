@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Run a coding agent headless with the okf skill on the test data and check
-# what it did (plan phase 03). Each run gets fresh local bare remotes, a
-# billing-api clone seeded from testdata/proto plus test/skill-eval/code, and,
-# for the cross-repo and injected scenarios, a knowledge-hub checkout next to
-# it, pre-assembled with copy_hub. No run touches GitHub: the hub's
-# https://github.com/$org/ URLs are rewritten to the local remotes.
+# what it did. Each run gets fresh local bare remotes: three code repos that
+# hold no knowledge (billing-api from test/skill-eval/code), and a hub that
+# lists them in repos.txt and holds testdata/proto's knowledge under
+# repos/<id>/. The agent works in a billing-api clone on a feature branch, with
+# a knowledge-hub clone next to it recorded as the hub. The user-level pointer
+# line (templates/user-pointer.md) is the only trigger; code repos carry
+# nothing. No run touches GitHub: https://github.com/$org/ URLs are rewritten
+# to the local remotes.
 #
 # Usage: skill-eval.sh --agent claude|omp [--runs N] [--scenario NAME]
 #                      [--timeout SECS] [--model MODEL]
-#   --scenario   read, write, cross-repo, injected, autoload,
-#                fresh-branch-clone, or all (default: the first four)
+#   --scenario   read, write, cross-repo, injected, autoload, or all
+#                (default: the first four)
 #   --runs       runs per scenario (default 1)
 #   --timeout    seconds per agent run (default 900)
 #   --model      model flag passed to the agent (default: the agent's default)
@@ -47,8 +50,8 @@ case $agent in claude|omp) ;; *) die "--agent must be claude or omp" ;; esac
 [[ $timeout_s =~ ^[1-9][0-9]*$ ]] || die "--timeout must be a positive number"
 case ${scenario:-core} in
   core) scenarios=(read write cross-repo injected) ;;
-  all) scenarios=(read write cross-repo injected autoload fresh-branch-clone) ;;
-  read|write|cross-repo|injected|autoload|fresh-branch-clone) scenarios=("$scenario") ;;
+  all) scenarios=(read write cross-repo injected autoload) ;;
+  read|write|cross-repo|injected|autoload) scenarios=("$scenario") ;;
   *) die "unknown scenario: $scenario" ;;
 esac
 
@@ -101,8 +104,8 @@ else
   echo "skill-eval: omp uses the real login, no extensions or rules, only the okf skill from $home/.omp/agent/skills"
 fi
 
-pointer_repo=$(cat "$TOOLS_ROOT/templates/AGENTS-pointer.md")
 pointer_user=$(cat "$TOOLS_ROOT/templates/user-pointer.md")
+branch=feat/invoice-retries   # the code branch every run works on
 
 # setup_git <run>: per-run git config; github.com/<org>/x -> <run>/remotes/x.git
 setup_git() {
@@ -115,44 +118,22 @@ setup_git() {
   git config --global "url.file://$1/remotes/.insteadOf" "https://github.com/$org/"
 }
 
-# folder_remote <bare> <bundle> [code-dir] [pointer]: a folder-mode code repo.
-folder_remote() {
-  local bare=$1 bundle=$2 code=${3:-} pointer=${4:-} w
+# code_remote <bare> [code-dir]: a code repo with no knowledge file.
+code_remote() {
+  local bare=$1 code=${2:-} w
   w=$(mktemp -d)
   git init -q "$w"
   if [ -n "$code" ]; then cp -R "$code/." "$w/"; else echo "# $(basename "$bare" .git)" > "$w/README.md"; fi
-  cp -R "$bundle" "$w/okf"
-  if [ -n "$pointer" ]; then
-    printf '%s\n' "$pointer" > "$w/AGENTS.md"
-    printf '%s\n' "$pointer" > "$w/CLAUDE.md"
-  fi
-  git -C "$w" add -A && git -C "$w" commit -qm "billing-api with okf"
+  git -C "$w" add -A && git -C "$w" commit -qm "$(basename "$bare" .git)"
   git clone -q --bare "$w" "$bare"
   rm -rf "$w"
-}
-
-# branch_remote <run> <bare> <bundle>: branch-mode repo; okf/main made by
-# `compass branch setup --init` in a seed clone, then filled with the bundle.
-branch_remote() {
-  local run=$1 bare=$2 bundle=$3 w=$1/seed
-  git init -q "$w"
-  cp -R "$here/code/." "$w/"
-  git -C "$w" add -A && git -C "$w" commit -qm "billing-api"
-  git clone -q --bare "$w" "$bare"
-  rm -rf "$w"
-  git clone -q "$bare" "$w"
-  (cd "$w" && PATH=$home/.local/bin:$PATH compass branch setup --init >/dev/null) || return 1
-  cp -R "$bundle/." "$w/okf/"
-  "$okf" index "$w/okf" >/dev/null
-  git -C "$w/okf" add -A && git -C "$w/okf" commit -qm "okf: billing-api bundle"
-  git -C "$w/okf" push -q -u origin okf/main
 }
 
 refs() { for b in "$1"/remotes/*.git; do echo "== $b"; git -C "$b" for-each-ref; done; }
 
-# prepare <scenario> <run> [pointer]: build remotes, the clone and the hub.
+# prepare <scenario> <run>: build the remotes, the clone and the hub clone.
 prepare() {
-  local sc=$1 run=$2 pointer=${3:-} set=$2/set
+  local sc=$1 run=$2 set=$2/set seed=$2/hub-seed r
   rm -rf "$run"; mkdir -p "$run/remotes"
   setup_git "$run"
   cp -R "$TESTDATA/proto" "$set"
@@ -160,26 +141,25 @@ prepare() {
     cat "$here/inject-repo.md" >> "$set/billing-api/okf/contracts/invoice-api.md"
     cat "$here/inject-hub.md" >> "$set/web-app/okf/services/web-app.md"
   fi
-  if [ "$sc" = fresh-branch-clone ]; then
-    branch_remote "$run" "$run/remotes/billing-api.git" "$set/billing-api/okf" || return 1
-  else
-    folder_remote "$run/remotes/billing-api.git" "$set/billing-api/okf" "$here/code" "$pointer"
-  fi
-  folder_remote "$run/remotes/web-app.git" "$set/web-app/okf"
-  folder_remote "$run/remotes/shared-auth.git" "$set/shared-auth/okf"
-  git clone -q "$run/remotes/billing-api.git" "$run/billing-api"
-  echo "REPO_BASE=$(git -C "$run/billing-api" rev-parse HEAD)" > "$run/base.env"
-  if [ "$sc" = cross-repo ] || [ "$sc" = injected ]; then
-    local hub=$run/knowledge-hub r
-    copy_hub "$set" "$hub" strip
-    : > "$hub/repos.txt"
-    for r in billing-api web-app shared-auth; do
-      echo "$r https://github.com/$org/$r folder" >> "$hub/repos.txt"
-    done
-    echo /repos/ > "$hub/.gitignore"
-    git -C "$hub" init -q && git -C "$hub" add -A && git -C "$hub" commit -qm hub
-    echo "HUB_BASE=$(git -C "$hub" rev-parse HEAD)" >> "$run/base.env"
-  fi
+  code_remote "$run/remotes/billing-api.git" "$here/code"
+  code_remote "$run/remotes/web-app.git"
+  code_remote "$run/remotes/shared-auth.git"
+  # The hub: proto's hub concepts plus each repo's knowledge under repos/<id>/.
+  copy_hub "$set" "$seed" strip
+  : > "$seed/repos.txt"
+  for r in billing-api web-app shared-auth; do
+    echo "$r https://github.com/$org/$r" >> "$seed/repos.txt"
+  done
+  (cd "$seed" && "$okf" index . >/dev/null) || return 1
+  git -C "$seed" init -q && git -C "$seed" add -A && git -C "$seed" commit -qm hub
+  git clone -q --bare "$seed" "$run/remotes/knowledge-hub.git"
+  rm -rf "$seed"
+  git clone -q "https://github.com/$org/knowledge-hub" "$run/knowledge-hub"
+  git clone -q "https://github.com/$org/billing-api" "$run/billing-api"
+  git -C "$run/billing-api" switch -q -c "$branch"
+  { echo "REPO_BASE=$(git -C "$run/billing-api" rev-parse HEAD)"
+    echo "HUB_BASE=$(git -C "$run/knowledge-hub" rev-parse HEAD)"
+    echo "BRANCH=$branch"; } > "$run/base.env"
   # The setup config, with the hub clone pointed at this run's hub.
   mkdir -p "$run/config/compass"
   sed "s|^OKF_HUB_DIR=.*|OKF_HUB_DIR=$run/knowledge-hub|" "$home/.config/compass/config" > "$run/config/compass/config"
@@ -203,7 +183,7 @@ run_agent() {
   [ -z "$append" ] || cmd+=(--append-system-prompt "$append")
   (
     cd "$run/billing-api" || exit 1
-    export PATH=$home/.local/bin:$PATH OKF_HUB_CACHE=$run/hub-cache GH_TOKEN=okf-eval-no-github
+    export PATH=$home/.local/bin:$PATH GH_TOKEN=okf-eval-no-github
     export XDG_CONFIG_HOME=$run/config   # the config `compass setup` wrote, per run
     unset OKF
     if [ -n "$claude_isolated" ]; then export CLAUDE_CONFIG_DIR=$home/.claude; fi
@@ -235,10 +215,10 @@ for sc in "${scenarios[@]}"; do
         if analyze autoload "$run" "$start" >/dev/null; then
           echo "  loaded: yes (pointer line: no)"; ok=0
         else
-          echo "  loaded: no (pointer line: no); retrying with the pointer line in AGENTS.md and CLAUDE.md"
+          echo "  loaded: no (pointer line: no); retrying with the user-level pointer line"
           run=$run-pointer
-          prepare "$sc" "$run" "$pointer_repo" || { echo "  setup failed"; continue; }
-          run_agent "$run" "$here/prompts/read.txt"
+          prepare "$sc" "$run" || { echo "  setup failed"; continue; }
+          run_agent "$run" "$here/prompts/read.txt" "$pointer_user"
           if analyze autoload "$run" "$start" >/dev/null; then
             echo "  loaded: yes (pointer line: yes)"; ok=0
           else
@@ -246,14 +226,9 @@ for sc in "${scenarios[@]}"; do
           fi
         fi
         ;;
-      fresh-branch-clone)
-        prepare "$sc" "$run" || { echo "  setup failed"; continue; }
-        run_agent "$run" "$here/prompts/read.txt" "$pointer_user"
-        analyze "$sc" "$run" "$start"; ok=$?
-        ;;
       *)
-        prepare "$sc" "$run" "$pointer_repo" || { echo "  setup failed"; continue; }
-        run_agent "$run" "$here/prompts/$sc.txt"
+        prepare "$sc" "$run" || { echo "  setup failed"; continue; }
+        run_agent "$run" "$here/prompts/$sc.txt" "$pointer_user"
         analyze "$sc" "$run" "$start"; ok=$?
         ;;
     esac

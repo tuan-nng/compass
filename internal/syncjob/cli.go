@@ -20,14 +20,20 @@ const usage = "usage: compass sync [-h] [--hub DIR] [--dry-run] [--token-env NAM
 	"                    [--ignore-login LOGIN] [--now DATETIME]\n"
 
 const help = usage + `
-Merge approved, green branch-mode knowledge pull requests after their code
-pull request merges, and clean up okf/<b> branches (research report section
-5, Branch mode).
+For each hub branch <id>/<b> of a repo in repos.txt: once branch <b>'s pull
+request in that repo merges, merge the hub pull request from <id>/<b> when a
+person with write access to the hub approved its head, it links the code pull
+request (owner/repo#N or its URL), it changes only what a branch for <id> may,
+and its merge with the hub's default branch adds no ` + "`compass hub check`" + `
+finding; then delete finished hub branches. Comments go on hub pull requests
+only; code repos are only read.
 
 options:
   -h, --help            show this help message and exit
-  --hub DIR             hub checkout holding repos.txt (default: the hub
-                        clone that ` + "`compass setup`" + ` recorded)
+  --hub DIR             hub clone whose origin names the hub repo; repos.txt
+                        is read from its default branch as fetched now
+                        (default: the hub clone that ` + "`compass setup`" + `
+                        recorded)
   --dry-run             read GitHub and log what would change; make no write
                         calls
   --token-env NAME      environment variable holding the API token (default:

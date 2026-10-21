@@ -1,12 +1,13 @@
 ---
 title: "OKF knowledge system: compass CLI, hub template and pilot"
-description: "People clone compass, build one compass binary, connect it to their own knowledge hub, and pilot the OKF knowledge system on real repos, folder mode first, then branch mode."
+description: "People clone compass, build one compass binary, connect it to their own knowledge hub, and pilot the OKF knowledge system on real repos through one hub, with each repo's knowledge under repos/<id>/."
 status: in-progress
 priority: P1
-effort: 17.5d build + 4-week pilot per mode
+effort: 16.5d build + 4-week pilot
 branch: master
 tags: [okf, knowledge, agents, tooling, go, cli]
 created: 2026-10-06
+blocked_by: [261021-1007-hub-branch-knowledge]
 ---
 
 # OKF knowledge system: compass CLI, hub template and pilot
@@ -17,6 +18,8 @@ created: 2026-10-06
 **Change:** Put all tooling into compass as one Go binary, `compass`. People clone compass, build it, and run `compass setup`, which asks for the knowledge hub they provide. Compass ships a hub template instead of owning a hub. Everything except one merge gate runs on people's machines: the only GitHub Actions job is the bundle check on each repo's pull requests. Then finish the remaining pieces (the skill, the stamper, the sync job) and pilot the system, folder mode first and branch mode later.
 **Why this way:** The user chose compass as the only code home, a Go binary, an end-user hub, and local-first operation (decisions 1–4 and 13–16). The strongest rejected alternative kept the tested scripts behind a thin `compass` wrapper. It needs no rewrite, but users would need bash, Python and uv, and there would be no build step. There are two main risks. Behavior could be lost in the rewrite, so the existing test suites carry over as end-to-end checks against the binary. Stamps and merges wait until someone runs them, and the pilot measures that delay.
 
+**Revised on 2026-10-21 (decision 23):** the plan `261021-1007-hub-branch-knowledge` moves all knowledge into the hub and removes the two modes, assembly and the bundle-check action. Phases 01–07 stay as the record of what was built; the pilot is now one hub-only pilot, phase 08.
+
 The work is grouped into five milestones. Each one leaves something usable behind:
 
 | Milestone | What works when it closes |
@@ -24,8 +27,8 @@ The work is grouped into five milestones. Each one leaves something usable behin
 | M1 One tool | `compass` builds from a clone, replaces every script, and passes every test the scripts passed. |
 | M2 Live on GitHub | `compass setup` connects a machine to a hub. Compass's bundle-check action gates the scratch repos' pull requests, and a hub made from the template assembles and checks on a developer machine. `okf-tools`, `knowledge-hub` and the scratch repos are gone. |
 | M3 Writers ready | `compass stamp` names a refused push, and both writers pass their checks on a hub folder copied from the template, with recorded GitHub responses (decision 22). Compass is public, so any account's repos can use its action. |
-| M4 Folder-mode pilot | 1–2 real folder-mode repos are live, and pilot metrics are collected. |
-| M5 Branch mode and read-out | A branch-mode repo is live, and the read-out decides whether to roll out further. |
+| M4 Hub-only pilot | 2–3 real repos are live in one pilot hub; `compass sync` and `compass stamp` have run live; pilot metrics are collected. |
+| M5 Read-out | The read-out decides whether to roll out further. |
 
 This plan replaces two earlier plans, merged on 2026-10-06: `260929-1607-okf-knowledge-system-rollout` and `261006-1351-compass-go-cli`. Git history keeps both.
 
@@ -70,10 +73,10 @@ Confirmed with the user:
    An end user copies the template into their own repo. `compass setup` asks for that hub repo and for a folder to clone it into, defaulting to `~/src/<repo>`; `--hub` and `--hub-dir` skip the prompts. It reuses an existing clone of the same repo, clones it otherwise, and stops before writing anything if the hub isn't readable. It records the hub and its folder in the user's config, installs the pinned `okf`, and installs the skill into each agent's user-level skill folder. Hub work happens in that clone, and the hub commands use it unless given another folder. How compass itself reaches a developer machine is out of scope; `make install` is one way. The same command, with flags instead of prompts, sets up CI and cloud agents. The rejected alternative created the hub during setup, which puts org-admin work in every developer's setup.
 4. **Delete `okf-tools`, `tuan-nng/knowledge-hub` and the scratch repos** once the scratch repos run green on compass. `knowledge-hub` holds only seed copies of test data. For phase 04's live checks, five scratch repos and a scratch hub, `tuan-nng/okf-scratch-hub`, played the end user's repos and hub. The hub was created from the template alone, which proved the template works. After phase 04 nothing uses them (decision 22), and compass owns no hub (decision 3), so phase 05 deletes all six. The rejected alternative archived the repos.
 5. **okfcli#34: a pinned, patched fork** (`tuan-nng/okf`, public), with the same patch sent upstream. `pins/okf.env` names the release repo with the tag and checksums. The fork stays separate from compass. okfcli keeps its code under `internal/`, so Go doesn't let compass import it, and `compass` installs and calls the pinned `okf` binary instead. We drop the fork once upstream releases a fix. The rejected alternative was date-only `stale_after`, which departs from the spec (design section 4.6).
-6. **Mode order.** Folder mode pilots first (M4), and branch mode joins in M5. The rejected alternative piloted both at once, which would delay the first pilot until the sync job is live.
+6. **Mode order.** Folder mode pilots first (M4), and branch mode joins in M5. The rejected alternative piloted both at once, which would delay the first pilot until the sync job is live. Superseded by decision 23: there are no modes, and one hub-only pilot replaces both.
 7. **No org setting (revised 2026-10-06).** The hub repo is the only thing a user names. `repos.txt` may list any `https://github.com/<owner>/<repo>` URL, so a hub can span accounts. The workflow templates name the compass repo by placeholder. Accepted cost: a reviewed `repos.txt` line can make every developer's assembly fetch any GitHub repo; its bundle is untrusted text either way (Design, Trust boundaries). The same line also makes `compass stamp` and `compass sync` write to that repo, with only the rights of the person who runs them. The rejected alternative, the decision before revision, set `OKF_ORG` in `config.env` or the user config and limited `repos.txt` to that account. It made every user know an org name, and it blocked hubs spanning accounts.
 8. **Pilot repos are chosen when phase 08 starts,** after M1–M2 give maintainers a working demo. They should be repos whose contract or schema test runs as a GitHub Actions job on pushes to the default branch (decision 13).
-9. **CI and cloud agents find branch-mode knowledge through the skill plus a pointer line.** `compass setup` runs in every CI and cloud agent environment. Each platform's organisation-level instructions get one line: check `git ls-remote origin okf/main`, and follow the OKF skill if that branch exists. The rejected alternatives:
+9. **CI and cloud agents find branch-mode knowledge through the skill plus a pointer line.** `compass setup` runs in every CI and cloud agent environment. Each platform's organisation-level instructions get one line: check `git ls-remote origin okf/main`, and follow the OKF skill if that branch exists. Superseded by decision 23: the line now runs `compass hub branch`, and it is the only trigger for every repo. The rejected alternatives:
    - the skill alone, which has no trigger in a fresh clone without `okf/`;
    - a marker file on code branches, which branch-mode maintainers don't want.
 10. **OpenKB is not adopted.** It is an alpha CLI that compiles documents into a wiki with an LLM. It has no trust fields, no hub, no git support and no failing lint. Two things are kept from it:
@@ -82,8 +85,8 @@ Confirmed with the user:
 11. **Seeding from docs waits for the pilot.** Most "why" knowledge lives in code, READMEs and pull requests. The read-out decides whether to run a one-off trial that drafts concepts from a repo's prose docs. Any drafts go through normal review, as `status: draft` with no `verified` entry.
 12. **Quality targets.** Each is checked in the phase that owns it:
     - pinned `okf` on the 10,000-concept hub: median validate under 10 s, search under 2 s, backlinks under 2 s;
-    - assembling 50 repos from local bare remotes: under 5 min cold, under 60 s warm;
-    - an approved, green knowledge pull request merges on the first `compass sync` run after its code pull request merges;
+    - assembling 50 repos from local bare remotes: under 5 min cold, under 60 s warm (superseded by decision 23: assembly is removed);
+    - an approved, green knowledge pull request merges on the first `compass sync` run after its code pull request merges (since decision 23: an approved hub pull request whose merge result passes sync's local check);
     - building `compass` in a CI job takes at most 60 s.
 
 Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user chose local-first operation with one CI gate. Each revised decision keeps the version it replaced as a rejected alternative.
@@ -98,10 +101,10 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
     - a scheduled hub workflow with a writer app (the decision before revision). Stamps carry a bot identity, but it needs a stored write key, plus rulesets and environments that GitHub Free refuses on private repos;
     - running the job in each repo's CI after merge. That needs a write credential and a workflow file in every repo, which branch-mode code branches can't hold.
 14. **No GitHub Apps.** Every compass command uses its caller's own GitHub credentials, so it can do only what that person can. The rejected alternative, a reader app for hub CI and a writer app for the writer workflow (the decision before revision), served only the hub-side Actions that decision 15 removes.
-15. **The hub has no CI, and no repo pipeline triggers it.** Cross-repo checks run where people read: `compass hub assemble`, then `compass hub check`. The agent runs them before it opens a hub pull request, and the reviewer runs them before approving. A hub pull request that waits on a repo change is checked again locally after that change merges, and the skill says so. Accepted cost: nothing reports a broken cross-repo link until someone assembles. Rejected alternatives:
+15. **The hub has no CI, and no repo pipeline triggers it.** Cross-repo checks run where people read: `compass hub assemble`, then `compass hub check`. The agent runs them before it opens a hub pull request, and the reviewer runs them before approving. A hub pull request that waits on a repo change is checked again locally after that change merges, and the skill says so. Accepted cost: nothing reports a broken cross-repo link until someone assembles. Decision 23 removes the assembly step; the hub still has no CI, and `compass sync` now runs `compass hub check` on each merge result. Rejected alternatives:
     - hub CI nightly, on manual dispatch and on hub pull requests (the decision before revision). It needs the reader app and Actions in the hub;
     - no Actions anywhere, with the bundle check as a git hook. Hooks don't run for cloud agents, CI agents, web edits or `--no-verify`, so stale or invalid bundles would reach the default branches every reader assembles.
-16. **The only CI entry point is `actions/bundle-check`,** a composite action that builds `compass` from source. Callers pin it by commit SHA. It sets up Go with a SHA-pinned `actions/setup-go` and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. The setup-go cache is off (changed 2026-10-07, phase 04): setup-go keys its cache on a `go.sum` under `GITHUB_WORKSPACE` and ignores files outside it, and compass's `go.sum` sits in the action's checkout, outside the caller's workspace. The uncached build takes about 19 s, under the 60 s target. Rejected alternatives:
+16. **The only CI entry point is `actions/bundle-check`,** a composite action that builds `compass` from source. Callers pin it by commit SHA. It sets up Go with a SHA-pinned `actions/setup-go` and builds `compass` from the action's own checkout. So the binary always matches the pinned code, with no release pipeline. The setup-go cache is off (changed 2026-10-07, phase 04): setup-go keys its cache on a `go.sum` under `GITHUB_WORKSPACE` and ignores files outside it, and compass's `go.sum` sits in the action's checkout, outside the caller's workspace. The uncached build takes about 19 s, under the 60 s target. Superseded by decision 23: the action is removed, and compass has no CI entry point. Rejected alternatives:
     - release binaries: faster, but a second pin and a release pipeline;
     - reusable workflows: a called workflow runs with its caller's token, which can't check out a private compass to build it.
 17. **Neutral module path.** The Go module is named `compass`, so no account name appears in the code (decision 7). People build from a clone with `make install`. The rejected alternative, `github.com/<org>/compass`, hard-codes today's account into every import.
@@ -114,9 +117,18 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
     - moving compass to the pilot repos' account, which ties compass to one org;
     - building compass in each workflow with a token secret in every pilot repo;
     - piloting only on repos under `tuan-nng`.
-22. **Tests need no extra GitHub repo (2026-10-07).** Every check after phase 04 runs on folders: local bare remotes, hub folders copied from `templates/hub/`, and recorded GitHub API responses served through `ghfake` (`--api-url` for the writers). GitHub-side behavior is next exercised on the pilot repos, which exist anyway: the first stamp in phase 08, the first sync merge in phase 09, and the first public run of the action in phase 08. Accepted cost: a GitHub behavior the recorded responses miss first shows up during the pilot, on a real repo (Risks). Rejected alternative: scratch repos under the personal account, as in phases 02–04 and the plan before this revision. They prove GitHub behavior before the pilot, but they are repos to create, keep in step and delete, and a throwaway protected repo was needed only to learn one message text.
+22. **Tests need no extra GitHub repo (2026-10-07).** Every check after phase 04 runs on folders: local bare remotes, hub folders copied from `templates/hub/`, and recorded GitHub API responses served through `ghfake` (`--api-url` for the writers). GitHub-side behavior is next exercised on the pilot repos and the pilot hub, which exist anyway: the first stamp and the first sync merge in phase 08. Accepted cost: a GitHub behavior the recorded responses miss first shows up during the pilot, on a real repo (Risks). Rejected alternative: scratch repos under the personal account, as in phases 02–04 and the plan before this revision. They prove GitHub behavior before the pilot, but they are repos to create, keep in step and delete, and a throwaway protected repo was needed only to learn one message text.
+23. **Hub-only knowledge supersedes the modes (2026-10-21).** The plan `261021-1007-hub-branch-knowledge` moves all knowledge into the hub, under `repos/<id>/`, and pairs repo X's branch A with hub branch `X/A`. It supersedes:
+    - folder mode and branch mode, with `compass branch setup`, its hooks and the `okf/main` workflow (decisions 6 and 9);
+    - `compass hub assemble` and its clone cache (decision 12's assembly target, and decision 15's local assembly; the hub still has no CI);
+    - `compass bundle check` and `actions/bundle-check` (decision 16);
+    - the folder and branch flows in Design, and the pilot phases 08–10 as first planned.
+
+    Phases 08 and 09 merge into one hub-only pilot, phase 08, and phase 09 is cancelled. That plan blocks phase 08 (frontmatter `blocked_by`). Rejected alternative: piloting the modes as planned, which keeps the per-repo setup that plan removes.
 
 ## Design
+
+**Superseded in part (2026-10-21, decision 23):** the design in `../261021-1007-hub-branch-knowledge/plan.md` replaces the modes, assembly, `compass bundle check`, `actions/bundle-check`, `compass branch setup` and the two flows below. The rest of this section records what phases 01–07 built.
 
 **Components:**
 
@@ -233,10 +245,10 @@ Decided in planning. Decisions 13–16 were revised on 2026-10-06, when the user
 | 04 | M2 | [phase-04-live-on-github.md](phase-04-live-on-github.md) | Hub CI, the apps and the writer workflow are gone; compass is pushed; the scratch repos run the bundle check from compass's action; a hub made from the template assembles and checks locally | completed |
 | 05 | M2 | [phase-05-cutover.md](phase-05-cutover.md) | `okf-tools`, `tuan-nng/knowledge-hub` and the six scratch repos are deleted, and the docs describe compass, the end-user hub and local-first operation | completed |
 | 06 | M3 | [phase-06-writers-local.md](phase-06-writers-local.md) | `compass stamp` names a refused push instead of "moved"; both writers pass on a hub folder copied from the template, with recorded GitHub responses | completed |
-| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and its action's code downloads without credentials | in-progress |
-| 08 | M4 | [phase-08-folder-pilot.md](phase-08-folder-pilot.md) | 1–2 folder-mode repos are live, and `compass pilot report` measures them | pending |
-| 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | One branch-mode repo is live, and CI and cloud agents find its knowledge | pending |
-| 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics and a roll-out decision is committed to the stats repo | pending |
+| 07 | M3 | [phase-07-publish-compass.md](phase-07-publish-compass.md) | Compass is public after a history check, and its action's code downloads without credentials | completed |
+| 08 | M4 | [phase-08-hub-pilot.md](phase-08-hub-pilot.md) | 2–3 repos are live in one pilot hub; sync and stamp have run live; CI and cloud agents find the hub; `compass pilot report` measures every repo | pending |
+| 09 | M5 | [phase-09-branch-pilot.md](phase-09-branch-pilot.md) | Cancelled by decision 23; its work moved into phase 08 | cancelled |
+| 10 | M5 | [phase-10-pilot-readout.md](phase-10-pilot-readout.md) | A read-out with the five metrics for every pilot repo and a roll-out decision is committed to the stats repo | pending |
 
 Dependencies:
 
@@ -246,11 +258,11 @@ Dependencies:
 - 05 needs 04.
 - 06 needs 04.
 - 07 needs 05.
-- 08 needs 06, 07, the pilot repos, the stats repo, and the `fetchBundle` cache fix that phase 04's Result names, done through `/af:fix`. `internal/hub/assemble.go` compares `git remote get-url origin`, which applies `insteadOf` rewrites, with the `repos.txt` URL. So under any `insteadOf` rule, including the suites' `map_owner` (`test/lib.sh`), every run clones from scratch, and the warm assembly times in Landed and phase 01 measured cold clones. The fix's test shows a warm run reusing the cache under an `insteadOf` rule.
-- 09 needs 08.
-- 10 needs 09 and the pilot windows.
+- 08 needs 06, 07, the pilot repos, the stats repo, and the completed plan `261021-1007-hub-branch-knowledge` (decision 23). That plan removes assembly, so the `fetchBundle` cache fix that phase 04's Result names is no longer needed.
+- 09 is cancelled (decision 23).
+- 10 needs 08 and the pilot windows.
 
-Scope: ten phases. Each closes one milestone step with its own exit check. M1 rewrites about 2,600 lines (824 of shell and Python entry points, 1,113 of Python library, 573 of validator) in one module, and splitting it further would hide which half works.
+Scope: ten phases, of which phase 09 is cancelled. Each closes one milestone step with its own exit check. M1 rewrites about 2,600 lines (824 of shell and Python entry points, 1,113 of Python library, 573 of validator) in one module, and splitting it further would hide which half works.
 
 ## Non-Goals
 
@@ -271,12 +283,12 @@ Scope: ten phases. Each closes one milestone step with its own exit check. M1 re
 
 1. A fresh compass clone builds `compass` with `make install`, with Go, make and git as the only prerequisites. `compass setup` against a readable hub leaves a working `okf`, the skill in each detected agent folder, a clone of the hub (an existing clone is reused), and a config. Against an unreadable hub it writes nothing.
 2. Every case in the moved suites passes against `compass`, and both recorded-API test sets pass in Go.
-3. A hub made only by copying `templates/hub/` assembles on a developer machine with `compass hub assemble`. Assembly fails on an empty bundle and a symlink, and `compass hub check` fails on a broken cross-repo link.
+3. A hub made only by copying `templates/hub/` assembles on a developer machine with `compass hub assemble`. Assembly fails on an empty bundle and a symlink, and `compass hub check` fails on a broken cross-repo link. Met in phase 04; the assembly part is superseded by decision 23, and `compass hub check` now fails on a symlink itself.
 4. `tuan-nng/okf-tools`, `tuan-nng/knowledge-hub` and the `okf-scratch-*` repos no longer exist, and nothing live refers to them.
-5. In a folder-mode pilot repo, an agent with the skill reads with trust rules and records 1–3 knowledge files in a code pull request. The bundle check passes, and a reviewer's `verified` line makes `okf show` report `human-reviewed`.
+5. In a pilot repo, an agent with the skill reads with trust rules and records 1–3 knowledge files under `repos/<id>/` in a hub pull request that names its code pull request. `compass hub check` passes on the hub branch, and a reviewer's `verified` line makes `okf show` report `human-reviewed`.
 6. The stamper stamps only concepts in `checks.txt`, only after the named check passed, and makes no commit when stamps are current.
-7. In a branch-mode repo, the `okf/main` workflow checks knowledge pull requests. `compass sync`, run by a person, carries out each state-table row on recorded GitHub responses, and merges the pilot's first approved, green knowledge pull request live.
-8. The read-out reports all five metrics for at least one repo per mode, over at least four weeks, and states a roll-out decision.
+7. `compass sync`, run by an agent with its developer's token, carries out each row of the hub-only state table (`261021-1007-hub-branch-knowledge`) on recorded GitHub responses, and merges the pilot's first approved hub pull request live after its code pull request merges.
+8. The read-out reports all five metrics for every pilot repo, over at least four weeks, and states a roll-out decision.
 
 ## Verification
 
@@ -284,27 +296,27 @@ Run from the compass root:
 
 - `go vet ./... && go test ./...` exits 0.
 - `./test/run-all.sh` exits 0.
-- In a clone of the hub, `compass hub assemble --ci . && compass hub check .` exits 0: for the scratch hub in M2 (done in phase 04) and the pilot hub after.
+- In a clone of the pilot hub, `compass hub check .` exits 0. For the scratch hub in M2, `compass hub assemble --ci . && compass hub check .` passed in phase 04, before decision 23 removed assembly.
 - `gh repo view tuan-nng/okf-tools` and `gh repo view tuan-nng/knowledge-hub` both exit non-zero.
-- `compass pilot report --repos pilot.txt --since <start>` prints a value for each of the five metrics, for at least one repo in each mode, and writes the same report into the stats clone.
+- `compass pilot report --repos pilot.txt --since <start>` prints a value for each of the five metrics, for every pilot repo, and writes the same report into the stats clone.
 - `af plans` reports zero findings.
 
 ## Risks
 
 - **The rewrite drops a behavior.** Signal: a moved end-to-end case fails, or a live run differs from its recorded result. Response: fix in place. The old scripts stay readable in the local `okf-tools` clone until phase 05.
 - **The validator port disagrees with okf-skills.** Signal: the differential test reports a difference. Response: fix the port. If the YAML parsing differences can't be closed, return to planning on decision 19.
-- **Building Go in the bundle-check job is slow.** Signal: the build step goes over 60 s (19 s uncached on 2026-10-07). Response: cache `GOCACHE` with `actions/cache`, keyed on a hash of the action's own Go sources computed in a run step. If that isn't enough, return to planning on decision 16.
+- **Building Go in the bundle-check job is slow.** Signal: the build step goes over 60 s (19 s uncached on 2026-10-07). Response: cache `GOCACHE` with `actions/cache`, keyed on a hash of the action's own Go sources computed in a run step. If that isn't enough, return to planning on decision 16. Retired by decision 23: the action is removed.
 - **Pushing compass exposes local-only files.** The harness folders and `CLAUDE.local.md` are ignored only through this clone's `.git/info/exclude`. Signal: before a push, `git ls-files` lists harness folders or `CLAUDE.local.md`. Response: stop and ask the user.
 - **Publishing compass exposes something private.** Phase 07 makes the whole history public. Signal: a secret-scan finding, or a private repo or person named in history. Response: stop and ask the user. Publishing then needs a history rewrite or a fresh repo.
 - **The account can't delete repos.** The `gh` token lacks `delete_repo`. Signal: HTTP 403. Response: the user runs `gh auth refresh -s delete_repo`, or deletes the repos in the GitHub UI.
-- **The pilot account refuses rulesets on private repos.** GitHub Free returns HTTP 403 "Upgrade to GitHub Pro" (checked on `tuan-nng`). Without rulesets, neither the hub's code-owner review nor the `okf/main` ruleset is enforced. Signal: the pilot repos' account is on Free and the repos are private. Response: the folder pilot goes ahead and the read-out names the gap. The branch pilot waits for an account that allows rulesets.
+- **The pilot account refuses rulesets on private repos.** GitHub Free returns HTTP 403 "Upgrade to GitHub Pro" (checked on `tuan-nng`). Without rulesets, neither the hub's code-owner review nor the approval before each merge is enforced, and every writing developer can push to the hub. Signal: the pilot hub is private on Free. Response: the hub-only plan's Risks entry: make the pilot hub public if its knowledge allows, or use a paid plan; otherwise the pilot runs with approval by convention, and the read-out names the gap.
 - **Upstream disagrees with the fork.** Signal: okfcli/okf#39 is rejected, or a release parses datetimes differently. Response: keep the fork pinned. Return to planning only if upstream rejects datetimes outright.
 - **Skills don't auto-load.** Signal: an agent in phase 03 skips the skill despite the pointer line. Response: make the pointer line the main trigger. Return to planning if Cursor can't load user-level skills. Cursor is untested, because the user has no Cursor access; its docs say it loads `~/.cursor/skills/` and `~/.claude/skills/` (phase 03 Result). The first pilot developer on Cursor is the first real check.
-- **The stamp runner has no bypass on a protected default branch.** Signal: `compass stamp` reports a protection refusal on a pilot repo (decision 13). Response: that repo gets no `process:` stamps until its maintainers grant the bypass, and the read-out says so.
-- **Nobody runs the writers.** Signal: pilot metric 5 shows knowledge pull requests still open a day after their code merged, or covered concepts lack `process:` stamps a week after their check passed. Response: name one daily owner in the pilot hub. If that fails, return to planning on decision 13.
-- **Local assembly is slow over GitHub.** Signal: a cold `compass hub assemble` of the pilot hub takes over 5 minutes. Response: use shallow partial clones or parallel fetches.
+- **The stamp runner has no bypass on the hub's protected default branch.** Signal: `compass stamp` reports a protection refusal on the pilot hub (decision 13). Response: no `process:` stamps until the hub owners grant the bypass, and the read-out says so.
+- **Nobody runs the writers.** Signal: pilot metric 5 shows hub pull requests still open a day after their code merged, or covered concepts lack `process:` stamps a week after their check passed. Response: name one daily owner in the pilot hub. If that fails, return to planning on decision 13.
+- **Local assembly is slow over GitHub.** Signal: a cold `compass hub assemble` of the pilot hub takes over 5 minutes. Response: use shallow partial clones or parallel fetches. Retired by decision 23: assembly is removed; the hub-only plan tracks hub size instead.
 - **The check never runs where the stamper looks.** Signal: a `checks.txt` row logs `no check run on head` for a week. Response: change that repo's triggers with its maintainers, or remove the row.
-- **CI and cloud agents miss branch-mode knowledge.** Signal: phase 03's fresh-clone scenario, or a phase 09 agent run, never runs branch setup. Response: return to planning for how branch-mode repos announce themselves.
+- **CI and cloud agents miss the hub.** Signal: phase 03's fresh-clone scenario, or a phase 08 agent run, never runs `compass hub branch`. Response: the hub-only plan's "Pointer-only discovery fails" entry.
 - **Folder tests miss a GitHub behavior (decision 22).** Signal: a writer's first live run on a pilot repo fails, or does something its recorded-response tests don't show. Response: record the real response as a new fixture, fix the writer, and rerun on the pilot repo. Neither writer runs on a schedule, so nothing repeats the failure until a person reruns it.
 
 ## Unresolved Questions
@@ -422,3 +434,11 @@ Inputs with fixed deadlines:
 - Phase 05 is completed. The user deleted the eight repos on GitHub; the local clones were removed after the checks. Phase 05's Result has the details.
 - The docs now describe decision 9's pointer line in place of an open gap.
 - Phase 03 is completed. The user has no Cursor access, so the manual Cursor run became `./test/skill-eval.sh --agent claude --scenario read --runs 3` on the current skill, which passed 3 of 3. Cursor itself stays untested (Risks).
+
+### Session 10 — 2026-10-21 (hub-only re-plan)
+**Trigger:** phase 04 of `261021-1007-hub-branch-knowledge`, after the user chose hub-only storage. **Changed:**
+- New decision 23; decisions 6, 9, 12, 15, 16 and 22 carry where it supersedes them, and Design opens with a pointer to the new plan.
+- Phases 08 and 09 merge into one hub-only pilot, `phase-08-hub-pilot.md` (renamed from `phase-08-folder-pilot.md`); phase 09 is `cancelled`. Pilot metric 5 applies to every repo.
+- Phase 10 depends on phase 08 and drops the per-mode repo table.
+- Milestones M4 and M5, the phase rows 08–10, Dependencies, Acceptance 3, 5, 7 and 8, the two pilot Verification lines and the Risks that named removed pieces.
+- Frontmatter effort: 16.5d, the phase files' sum without the cancelled phase 09 (phase 08 is now 2.5d).

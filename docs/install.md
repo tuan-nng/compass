@@ -3,22 +3,28 @@
 This guide takes a team from nothing to a working setup:
 
 1. Each developer installs `compass` and runs `compass setup` once per machine.
-2. One person makes the team's hub repo from compass's template.
-3. Each repo that keeps knowledge gets a bundle, a CI check, and a row in the hub.
+2. One person makes the team's hub repo from compass's template and protects
+   it.
+3. Each repo that keeps knowledge gets one row in the hub's `repos.txt`. The
+   repo itself gets nothing.
+4. Each developer adds one line to their user-level agent instructions, which
+   sends agents to the hub.
 
-CI and cloud agents need the same per-machine setup. Hub owners also run the
-two commands that write to GitHub. Both have their own sections near the end.
+CI and cloud agents need the same per-machine setup. The two commands that
+write to GitHub have their own section near the end.
 
 ## Prerequisites
 
 - **Linux or macOS, on amd64 or arm64.** These are the platforms the pinned
   `okf` release is built for; `compass okf install` refuses any other.
 - **Go 1.23 or newer**, to build compass.
-- **git.** Branch mode needs git 2.28 or newer, and 2.42 or newer to create a
-  repo's `okf/main` branch.
+- **git 2.41 or newer.** `compass sync` builds each merge with
+  `git --attr-source=... merge-tree --write-tree`, which older git lacks.
 - **git access to GitHub over HTTPS without a prompt.** `compass setup` reads
   and clones the hub over `https://github.com/...` and never asks for a
   password. If you use the GitHub CLI, `gh auth setup-git` sets this up.
+- **Push access to the hub,** for every developer whose agent writes
+  knowledge (section 3).
 
 ## 1. Install compass
 
@@ -36,8 +42,8 @@ compass version
 if `GOBIN` is unset. That folder must be on your `PATH`, because agents call
 `compass` too. `compass version` prints the commit you built.
 
-Keep the clone. You copy the hub template and the repo workflows from it in
-the steps below.
+Keep the clone. You copy the hub template and the agent pointer line from it
+in the steps below.
 
 ## 2. Set up your machine
 
@@ -74,20 +80,27 @@ when it changed.
 Check the result:
 
 ```sh
-okf --version   # JSON whose "version" is the pinned 0.5.0-tuan-nng.1
+okf --version      # JSON whose "version" is the pinned 0.5.0-tuan-nng.1
+compass hub check  # checks the recorded hub clone; a new hub passes
 ```
 
-`compass hub assemble` and `compass hub check` use the recorded hub clone,
-so they work from any folder. On a new hub they exit 1 with
-`repos.txt lists no repos`; they are useful once section 4 adds a repo.
+`compass hub check`, `compass hub branch`, `compass sync` and
+`compass stamp` use the recorded hub clone, so they work from any folder.
 
 ## 3. Make your team's hub
 
 Do this once per team. Skip it if your team already has a hub.
 
-The hub is an ordinary GitHub repo holding knowledge that spans repos, plus
-two control files: `repos.txt` lists the repos to assemble, and `checks.txt`
-lists the CI jobs that earn stamps. It has no workflows and stores no keys.
+The hub is an ordinary GitHub repo that holds all the knowledge: each listed
+repo's concepts under `repos/<id>/`, and knowledge that spans repos beside
+them. It also holds two control files: `repos.txt` lists the repos, and
+`checks.txt` lists the CI jobs that earn stamps. It has no workflows and
+stores no keys.
+
+**One hub per access group.** Anyone who can read the hub reads every listed
+repo's knowledge, and compass has no per-repo access control. If some repos'
+knowledge must stay apart, make one hub for each group of people who may read
+it.
 
 ```sh
 gh repo create OWNER/knowledge-hub --private --clone
@@ -100,44 +113,53 @@ Then:
 1. In `CODEOWNERS`, replace `@OKF_HUB_OWNERS` with the people who approve
    changes to `CODEOWNERS`, `repos.txt` and `checks.txt`.
 2. Commit and push.
-3. Add a ruleset on the default branch that blocks direct pushes and requires
-   a pull request with a code-owner approval. On GitHub Free, rulesets work
-   only on public repos. A private hub on Free relies on reviewers following
-   the rule by hand.
+3. Give push access to every developer whose agent writes knowledge. Their
+   agents push hub branches named `<id>/<branch>`.
+4. Protect the default branch, as below.
 
-The hub's `overview.md` explains how to fill it in, check it, and protect it.
-It travels with the hub, so the team reads it there.
+### Protect the hub
+
+Every writing developer can push to the hub, so the review before each merge
+holds only where GitHub enforces it. Add a ruleset on the default branch that:
+
+- blocks direct pushes;
+- requires a pull request, with a code-owner approval, so changes to the
+  control files need the people named in `CODEOWNERS`.
+
+Only the person who runs `compass stamp` needs a bypass of this ruleset,
+because the stamper pushes stamps straight to the default branch.
+`compass sync` merges approved pull requests, which the ruleset allows.
+
+Rulesets need a public hub or a paid GitHub plan. On GitHub Free they work
+only on public repos, so a private hub on Free relies on reviewers following
+the rule by hand.
+
+The hub's `overview.md` explains how to fill it in, write to it, check it,
+and protect it. It travels with the hub, so the team reads it there.
 
 ## 4. Add a repo
 
-The repo's maintainers first choose a mode:
+Add one row to the hub's `repos.txt`, through a hub pull request:
 
-- **Folder mode:** knowledge lives in `okf/` on the default branch and is
-  reviewed in the code pull request.
-- **Branch mode:** knowledge lives on an `okf/main` branch, for maintainers
-  who want no knowledge files on their code branches.
+```
+billing-api https://github.com/acme/billing-api
+```
 
-Both modes run compass's bundle check in CI. The workflow templates pin the
-action to a compass commit, so the check always builds the code you chose.
-Before committing a workflow, replace two placeholders in it:
+The first column is the repo's id. It names the folder `repos/<id>/` and
+prefixes the repo's hub branches, `<id>/<branch>`. An id may use letters,
+digits, `.`, `_` and `-`. It may not start with `.` or `-`, contain `..`, or
+end in `.lock`. The URL may name any owner.
 
-- `COMPASS_REPO` with `tuan-nng/compass`;
-- `COMPASS_SHA` with a full 40-character compass commit SHA, such as the one
-  `git ls-remote https://github.com/tuan-nng/compass master` prints.
+Nothing changes in the repo itself: no folder, workflow, hook or instruction
+file. Its `repos/<id>/` folder appears with the first hub branch that writes
+to it.
 
-### Folder mode
-
-In a clone of the repo, on a new branch:
+To start the folder by hand, add `repos/billing-api/overview.md` in the same
+hub pull request as the row:
 
 ```sh
-mkdir okf
-cat > okf/index.md <<'EOF'
----
-okf_version: "0.2"
----
-# Index
-EOF
-cat > okf/overview.md <<'EOF'
+mkdir -p repos/billing-api
+cat > repos/billing-api/overview.md <<'EOF'
 ---
 type: Overview
 title: billing-api
@@ -150,10 +172,8 @@ generated: { by: human:alice, at: 2026-10-07T12:00:00Z }
 
 One paragraph on what this repo is for.
 EOF
-okf index okf
-git add okf
-git commit -m "okf: start the bundle"
-compass bundle check okf
+okf index .
+compass hub check .
 ```
 
 In `generated`, put your GitHub login after `human:` and the current UTC time
@@ -161,82 +181,38 @@ In `generated`, put your GitHub login after `human:` and the current UTC time
 without `generated`, or with a `by` that is not `human:<id>`,
 `process:<id>` or `<producer>/<version>`.
 
-`okf index okf` rewrites `okf/index.md` and adds an `index.md` to each folder.
-Committing that now keeps the one-time change out of the first agent pull
-request. `compass bundle check okf` runs the same check as CI. It refuses
-uncommitted changes in the bundle, so commit first.
+`okf index .` at the hub root writes `repos/billing-api/index.md` and updates
+`repos/index.md` and the root `index.md`. `compass hub check .` then checks
+the hub with the new folder in place. Name the branch for this pull request so
+it does not start with an id from `repos.txt`; `compass sync` treats those as
+paired with a code branch.
 
-Then, in the same pull request:
+## 5. Point agents at the hub
 
-1. Copy `templates/folder-workflow.yml` from compass to
-   `.github/workflows/okf.yml`, and fill in the two placeholders.
-2. Add the line in `templates/AGENTS-pointer.md` to the repo's `AGENTS.md`
-   or `CLAUDE.md`. It tells agents to read `okf/index.md` and follow the skill.
+Agents load a skill only when its description matches the task, and the code
+repos carry nothing that mentions the hub. So each developer adds the line in
+compass's `templates/user-pointer.md` to their user-level agent instructions,
+such as `~/.claude/CLAUDE.md` for Claude Code. It is the only thing that sends
+an agent to the hub. It tells the agent to run `compass hub branch` in the
+repo before starting work and, if the repo is listed, to run `compass sync`
+and follow the OKF skill.
 
-Last, add a row to the hub's `repos.txt` through a hub pull request:
+From then on, an agent working on branch `<b>` of a listed repo:
 
-```
-billing-api https://github.com/acme/billing-api folder
-```
+1. runs `compass hub branch` in the repo's clone, which prints the path of a
+   hub worktree on `<id>/<b>`, at `<hub clone>.worktrees/<id>/<b>`;
+2. reads and writes knowledge there;
+3. runs `okf index .` and `compass hub check .` in the worktree, commits,
+   pushes `<id>/<b>`, and opens a hub pull request that names the code pull
+   request, as `owner/repo#N` or its URL.
 
-Once the repo's change is on its default branch, check the hub with the new
-row in place:
+A person with push access to the hub reviews and approves the hub pull
+request. Once the code pull request merges, the next `compass sync` merges
+it ("The two writers" below).
 
-```sh
-compass hub assemble
-compass hub check
-```
-
-### Branch mode
-
-1. Agree with the maintainers on the `okf/...` branches. Hub owners need
-   write access, because `compass sync` merges into `okf/main` and
-   `compass stamp` commits to it.
-2. In a clone, create the branch. Only the first person does this.
-
-   ```sh
-   compass branch setup --init
-   ```
-
-   It creates the empty branch `okf/main` with a root `index.md` and checks
-   it out at `okf/`. Add `okf/overview.md` as in folder mode, then:
-
-   ```sh
-   okf index okf
-   git -C okf add -A
-   git -C okf commit -m "okf: start the bundle"
-   git -C okf push -u origin okf/main
-   ```
-
-3. On `okf/main` only, add `templates/okf-main-workflow.yml` as
-   `.github/workflows/okf.yml` and fill in the two placeholders. The code
-   branches never carry it.
-4. Protect `okf/main` so changes arrive only through pull requests, with a
-   bypass for the hub owners.
-5. Add a row to the hub's `repos.txt`:
-
-   ```
-   web-app https://github.com/acme/web-app branch
-   ```
-
-The repo's `AGENTS.md` lives on the code branches, so it cannot point agents
-at `okf/main`. Instead, each developer adds the line in
-`templates/user-pointer.md` to their user-level agent instructions, then runs
-this once in each clone:
-
-```sh
-compass branch setup
-```
-
-It checks out `okf/` and installs two git hooks. From then on, switching
-branches switches `okf/` to the matching knowledge branch.
-
-If the repo uses a hook manager, setup refuses before changing anything. It
-checks whether git's `core.hooksPath` is set, or a hook that isn't compass's
-is already in `.git/hooks`.
-Run `compass branch setup --no-hooks` and add the hooks through the manager
-instead. `templates/hooks/` has snippets for husky and lefthook, and
-`compass branch setup --print-hook post-checkout` prints a hook script.
+A hub pull request that a reviewer will merge by hand, such as one from
+section 4, gets no check from `compass sync`. The reviewer runs
+`compass hub check` on its branch before approving it.
 
 ## CI and cloud agents
 
@@ -249,37 +225,42 @@ compass setup --hub OWNER/REPO --yes --agents claude
 ```
 
 `--yes` takes the flags and defaults and asks nothing. The environment still
-needs git credentials that can read the hub over HTTPS.
+needs git credentials that can read the hub over HTTPS, and push to it if its
+agents write knowledge.
 
-For branch-mode repos, add the line in `templates/user-pointer.md` to the
-platform's organisation-level agent instructions. CI and cloud agents start
-from fresh clones without the hooks, and the line tells them to run
-`compass branch setup` first. This has only been tested in a headless
-scenario so far.
+Add the line in `templates/user-pointer.md` to the platform's
+organisation-level agent instructions. No real CI or cloud agent has run it
+yet.
 
-## Hub owners: the two writers
+## The two writers
 
-Two commands write to GitHub. Hub owners run them from their hub clone, on
-demand, during the pilot daily:
+Two commands write to GitHub. Both write only to the hub; they only read the
+code repos.
 
+- `compass sync` merges an approved hub pull request from `<id>/<b>` after
+  the linked code pull request from `<b>` merges into the default branch of
+  repo `<id>`. Before merging, it checks the merge result locally and refuses
+  a branch that adds a finding. Otherwise it comments on the hub pull request
+  and tries again next run. It also closes abandoned hub pull requests and
+  deletes finished hub branches. Agents run it when a session starts; then
+  `compass hub branch --prune` removes this machine's finished worktrees.
 - `compass stamp` marks concepts `verified: process:<actor>` when the CI job
-  that `checks.txt` names passed on the repo's default branch.
-- `compass sync` merges approved, green branch-mode knowledge pull requests
-  after their code pull request merges, and deletes finished `okf/<b>`
-  branches.
+  that `checks.txt` names passed on the code repo's default branch head. It
+  commits the stamps to the hub's default branch, with one fast-forward per
+  run.
 
 Both read a token from `GITHUB_TOKEN`, or from the variable `--token-env`
-names. The token's account needs write access to every repo in `repos.txt`:
-the stamper commits through the GitHub API, and sync merges, closes and
-comments on pull requests and deletes branches. A protected default branch
-or `okf/main` also needs a bypass for that account. Without one, GitHub
-refuses the stamper's push, and the stamper says so and exits non-zero.
+names. The token's account needs read access to every repo in `repos.txt`
+and write access to the hub. When sync cannot read a repo, it reports that
+repo's branches as failed, goes on with the others, and exits 1. The stamper
+also needs the ruleset bypass from section 3. Without one, GitHub refuses
+its push, and the stamper says so and exits non-zero.
 
 Start with a dry run, which reads GitHub and makes no writes:
 
 ```sh
-GITHUB_TOKEN=$(gh auth token) compass stamp --dry-run
 GITHUB_TOKEN=$(gh auth token) compass sync --dry-run
+GITHUB_TOKEN=$(gh auth token) compass stamp --dry-run
 ```
 
 ## Updating
@@ -292,22 +273,18 @@ compass setup
 ```
 
 Re-running setup installs a newer pinned `okf` or skill if the update changed
-them. It leaves the hub clone alone. Repos pick up a new bundle check only
-when you change `COMPASS_SHA` in their workflow.
+them. It leaves the hub clone alone. Nothing in the code repos needs to
+change.
 
 ## Removing
 
-compass keeps no state outside the places in the setup table, plus a clone
-cache for assembly. To remove it, delete:
+compass keeps no state outside the places in the setup table, plus the hub
+worktrees that `compass hub branch` creates. To remove it, delete:
 
 - `compass` from `$(go env GOBIN)` or `$(go env GOPATH)/bin`;
 - `okf` from `~/.local/bin`, or from the `--prefix` you chose;
 - `~/.config/compass/`;
 - the `skills/okf` folder in each agent's folder;
-- the assembly cache, `${XDG_CACHE_HOME:-~/.cache}/okf-hub`, or
-  `$OKF_HUB_CACHE` if you set it;
+- the line from `templates/user-pointer.md` in your agent instructions;
+- the hub worktrees, under `<hub clone>.worktrees/`;
 - the hub clone, if you no longer need it.
-
-In a branch-mode clone, also remove the two hooks from `.git/hooks/`
-(`post-checkout` and `reference-transaction`, marked `okf-branch-hook`) and
-the `okf/` worktree, with `git worktree remove okf`.
